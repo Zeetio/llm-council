@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
@@ -11,7 +12,9 @@ export default function ChatInterface({
   isLoading,
 }) {
   const [input, setInput] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState([]);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -21,11 +24,44 @@ export default function ChatInterface({
     scrollToBottom();
   }, [conversation]);
 
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files);
+    const textFiles = [];
+
+    for (const file of files) {
+      try {
+        const content = await file.text();
+        textFiles.push({ name: file.name, content });
+      } catch (err) {
+        console.error(`Failed to read file ${file.name}:`, err);
+      }
+    }
+
+    setAttachedFiles((prev) => [...prev, ...textFiles]);
+    e.target.value = '';
+  };
+
+  const removeFile = (index) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim() && !isLoading) {
-      onSendMessage(input);
+    if ((input.trim() || attachedFiles.length > 0) && !isLoading) {
+      let fullMessage = input;
+
+      if (attachedFiles.length > 0) {
+        const fileContents = attachedFiles
+          .map((f) => `--- ${f.name} ---\n${f.content}`)
+          .join('\n\n');
+        fullMessage = fullMessage
+          ? `${fullMessage}\n\n${fileContents}`
+          : fileContents;
+      }
+
+      onSendMessage(fullMessage);
       setInput('');
+      setAttachedFiles([]);
     }
   };
 
@@ -64,7 +100,9 @@ export default function ChatInterface({
                   <div className="message-label">You</div>
                   <div className="message-content">
                     <div className="markdown-content">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </div>
@@ -91,8 +129,9 @@ export default function ChatInterface({
                   {msg.stage2 && (
                     <Stage2
                       rankings={msg.stage2}
-                      labelToModel={msg.metadata?.label_to_model}
+                      labelToId={msg.metadata?.label_to_id}
                       aggregateRankings={msg.metadata?.aggregate_rankings}
+                      stage1Results={msg.stage1}
                     />
                   )}
 
@@ -120,8 +159,24 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      {conversation.messages.length === 0 && (
-        <form className="input-form" onSubmit={handleSubmit}>
+      <form className="input-form" onSubmit={handleSubmit}>
+        <div className="input-wrapper">
+          {attachedFiles.length > 0 && (
+            <div className="attached-files">
+              {attachedFiles.map((file, index) => (
+                <div key={index} className="attached-file">
+                  <span className="file-name">{file.name}</span>
+                  <button
+                    type="button"
+                    className="remove-file"
+                    onClick={() => removeFile(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             className="message-input"
             placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
@@ -131,15 +186,34 @@ export default function ChatInterface({
             disabled={isLoading}
             rows={3}
           />
+        </div>
+        <div className="input-actions">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept=".md,.txt,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.yml,.yaml,.xml,.csv,.log"
+            multiple
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="attach-button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            title="Attach files"
+          >
+            📎
+          </button>
           <button
             type="submit"
             className="send-button"
-            disabled={!input.trim() || isLoading}
+            disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
           >
             Send
           </button>
-        </form>
-      )}
+        </div>
+      </form>
     </div>
   );
 }

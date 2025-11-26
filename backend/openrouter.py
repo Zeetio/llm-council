@@ -1,6 +1,7 @@
 """OpenRouter API client for making LLM requests."""
 
 import httpx
+import asyncio
 from typing import List, Dict, Any, Optional
 from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
 
@@ -8,6 +9,7 @@ from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
 async def query_model(
     model: str,
     messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
     timeout: float = 120.0
 ) -> Optional[Dict[str, Any]]:
     """
@@ -16,6 +18,7 @@ async def query_model(
     Args:
         model: OpenRouter model identifier (e.g., "openai/gpt-4o")
         messages: List of message dicts with 'role' and 'content'
+        system_prompt: Optional system prompt to prepend
         timeout: Request timeout in seconds
 
     Returns:
@@ -26,9 +29,15 @@ async def query_model(
         "Content-Type": "application/json",
     }
 
+    # Build messages with optional system prompt
+    final_messages = []
+    if system_prompt:
+        final_messages.append({"role": "system", "content": system_prompt})
+    final_messages.extend(messages)
+
     payload = {
         "model": model,
-        "messages": messages,
+        "messages": final_messages,
     }
 
     try:
@@ -58,7 +67,7 @@ async def query_models_parallel(
     messages: List[Dict[str, str]]
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
-    Query multiple models in parallel.
+    Query multiple models in parallel (legacy function for compatibility).
 
     Args:
         models: List of OpenRouter model identifiers
@@ -67,13 +76,37 @@ async def query_models_parallel(
     Returns:
         Dict mapping model identifier to response dict (or None if failed)
     """
-    import asyncio
-
-    # Create tasks for all models
     tasks = [query_model(model, messages) for model in models]
+    responses = await asyncio.gather(*tasks)
+    return {model: response for model, response in zip(models, responses)}
 
-    # Wait for all to complete
+
+async def query_members_parallel(
+    members: List[Dict[str, Any]],
+    messages: List[Dict[str, str]]
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """
+    Query multiple council members in parallel.
+
+    Args:
+        members: List of member dicts with 'id', 'model', 'system_prompt'
+        messages: List of message dicts to send to each member
+
+    Returns:
+        Dict mapping member id to response dict (or None if failed)
+    """
+    tasks = [
+        query_model(
+            member["model"],
+            messages,
+            system_prompt=member.get("system_prompt")
+        )
+        for member in members
+    ]
+
     responses = await asyncio.gather(*tasks)
 
-    # Map models to their responses
-    return {model: response for model, response in zip(models, responses)}
+    return {
+        member["id"]: response
+        for member, response in zip(members, responses)
+    }

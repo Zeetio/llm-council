@@ -1,31 +1,55 @@
 """3-stage LLM Council orchestration."""
 
 from typing import List, Dict, Any, Tuple
-from .openrouter import query_models_parallel, query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
+from .openrouter import query_members_parallel, query_model
+from .config import get_council_members, get_chairman
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+async def stage1_collect_responses(
+    user_query: str,
+    conversation_history: List[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
     """
-    Stage 1: Collect individual responses from all council models.
+    Stage 1: Collect individual responses from all council members.
 
     Args:
         user_query: The user's question
+        conversation_history: Previous messages in the conversation
 
     Returns:
-        List of dicts with 'model' and 'response' keys
+        List of dicts with 'id', 'name', 'model' and 'response' keys
     """
-    messages = [{"role": "user", "content": user_query}]
+    messages = []
 
-    # Query all models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    # Add conversation history if available
+    if conversation_history:
+        for msg in conversation_history:
+            if msg['role'] == 'user':
+                messages.append({"role": "user", "content": msg['content']})
+            elif msg['role'] == 'assistant':
+                # Use Stage3 final answer as assistant response
+                messages.append({"role": "assistant", "content": msg['stage3']['response']})
 
-    # Format results
+    # Add new user query
+    messages.append({"role": "user", "content": user_query})
+
+    # Get council members from config
+    members = get_council_members()
+
+    # Query all members in parallel
+    responses = await query_members_parallel(members, messages)
+
+    # Format results - create a lookup for member info
+    member_lookup = {m["id"]: m for m in members}
+
     stage1_results = []
-    for model, response in responses.items():
+    for member_id, response in responses.items():
         if response is not None:  # Only include successful responses
+            member = member_lookup.get(member_id, {})
             stage1_results.append({
-                "model": model,
+                "id": member_id,
+                "name": member.get("name", member_id),
+                "model": member.get("model", "unknown"),
                 "response": response.get('content', '')
             })
 
@@ -37,21 +61,21 @@ async def stage2_collect_rankings(
     stage1_results: List[Dict[str, Any]]
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
-    Stage 2: Each model ranks the anonymized responses.
+    Stage 2: Each member ranks the anonymized responses.
 
     Args:
         user_query: The original user query
         stage1_results: Results from Stage 1
 
     Returns:
-        Tuple of (rankings list, label_to_model mapping)
+        Tuple of (rankings list, label_to_id mapping)
     """
     # Create anonymized labels for responses (Response A, Response B, etc.)
     labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
 
-    # Create mapping from label to model name
-    label_to_model = {
-        f"Response {label}": result['model']
+    # Create mapping from label to member id (for de-anonymization)
+    label_to_id = {
+        f"Response {label}": result['id']
         for label, result in zip(labels, stage1_results)
     }
 
@@ -94,22 +118,30 @@ Now provide your evaluation and ranking:"""
 
     messages = [{"role": "user", "content": ranking_prompt}]
 
-    # Get rankings from all council models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    # Get council members from config
+    members = get_council_members()
+
+    # Get rankings from all council members in parallel
+    responses = await query_members_parallel(members, messages)
 
     # Format results
+    member_lookup = {m["id"]: m for m in members}
+
     stage2_results = []
-    for model, response in responses.items():
+    for member_id, response in responses.items():
         if response is not None:
+            member = member_lookup.get(member_id, {})
             full_text = response.get('content', '')
             parsed = parse_ranking_from_text(full_text)
             stage2_results.append({
-                "model": model,
+                "id": member_id,
+                "name": member.get("name", member_id),
+                "model": member.get("model", "unknown"),
                 "ranking": full_text,
                 "parsed_ranking": parsed
             })
 
-    return stage2_results, label_to_model
+    return stage2_results, label_to_id
 
 
 async def stage3_synthesize_final(
@@ -126,16 +158,19 @@ async def stage3_synthesize_final(
         stage2_results: Rankings from Stage 2
 
     Returns:
-        Dict with 'model' and 'response' keys
+        Dict with 'id', 'name', 'model' and 'response' keys
     """
+    # Get chairman config
+    chairman = get_chairman()
+
     # Build comprehensive context for chairman
     stage1_text = "\n\n".join([
-        f"Model: {result['model']}\nResponse: {result['response']}"
+        f"Member: {result['name']}\nResponse: {result['response']}"
         for result in stage1_results
     ])
 
     stage2_text = "\n\n".join([
-        f"Model: {result['model']}\nRanking: {result['ranking']}"
+        f"Member: {result['name']}\nRanking: {result['ranking']}"
         for result in stage2_results
     ])
 
@@ -158,18 +193,26 @@ Provide a clear, well-reasoned final answer that represents the council's collec
 
     messages = [{"role": "user", "content": chairman_prompt}]
 
-    # Query the chairman model
-    response = await query_model(CHAIRMAN_MODEL, messages)
+    # Query the chairman model with its system prompt
+    response = await query_model(
+        chairman["model"],
+        messages,
+        system_prompt=chairman.get("system_prompt")
+    )
 
     if response is None:
         # Fallback if chairman fails
         return {
-            "model": CHAIRMAN_MODEL,
+            "id": chairman["id"],
+            "name": chairman.get("name", "Chairman"),
+            "model": chairman["model"],
             "response": "Error: Unable to generate final synthesis."
         }
 
     return {
-        "model": CHAIRMAN_MODEL,
+        "id": chairman["id"],
+        "name": chairman.get("name", "Chairman"),
+        "model": chairman["model"],
         "response": response.get('content', '')
     }
 
@@ -210,22 +253,22 @@ def parse_ranking_from_text(ranking_text: str) -> List[str]:
 
 def calculate_aggregate_rankings(
     stage2_results: List[Dict[str, Any]],
-    label_to_model: Dict[str, str]
+    label_to_id: Dict[str, str]
 ) -> List[Dict[str, Any]]:
     """
-    Calculate aggregate rankings across all models.
+    Calculate aggregate rankings across all members.
 
     Args:
-        stage2_results: Rankings from each model
-        label_to_model: Mapping from anonymous labels to model names
+        stage2_results: Rankings from each member
+        label_to_id: Mapping from anonymous labels to member ids
 
     Returns:
-        List of dicts with model name and average rank, sorted best to worst
+        List of dicts with member id/name and average rank, sorted best to worst
     """
     from collections import defaultdict
 
-    # Track positions for each model
-    model_positions = defaultdict(list)
+    # Track positions for each member
+    member_positions = defaultdict(list)
 
     for ranking in stage2_results:
         ranking_text = ranking['ranking']
@@ -234,17 +277,17 @@ def calculate_aggregate_rankings(
         parsed_ranking = parse_ranking_from_text(ranking_text)
 
         for position, label in enumerate(parsed_ranking, start=1):
-            if label in label_to_model:
-                model_name = label_to_model[label]
-                model_positions[model_name].append(position)
+            if label in label_to_id:
+                member_id = label_to_id[label]
+                member_positions[member_id].append(position)
 
-    # Calculate average position for each model
+    # Calculate average position for each member
     aggregate = []
-    for model, positions in model_positions.items():
+    for member_id, positions in member_positions.items():
         if positions:
             avg_rank = sum(positions) / len(positions)
             aggregate.append({
-                "model": model,
+                "id": member_id,
                 "average_rank": round(avg_rank, 2),
                 "rankings_count": len(positions)
             })
@@ -293,31 +336,37 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(
+    user_query: str,
+    conversation_history: List[Dict[str, Any]] = None
+) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
         user_query: The user's question
+        conversation_history: Previous messages in the conversation
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query)
+    stage1_results = await stage1_collect_responses(user_query, conversation_history)
 
-    # If no models responded successfully, return error
+    # If no members responded successfully, return error
     if not stage1_results:
         return [], [], {
+            "id": "error",
+            "name": "Error",
             "model": "error",
             "response": "All models failed to respond. Please try again."
         }, {}
 
     # Stage 2: Collect rankings
-    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
+    stage2_results, label_to_id = await stage2_collect_rankings(user_query, stage1_results)
 
     # Calculate aggregate rankings
-    aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+    aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
 
     # Stage 3: Synthesize final answer
     stage3_result = await stage3_synthesize_final(
@@ -328,7 +377,7 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
 
     # Prepare metadata
     metadata = {
-        "label_to_model": label_to_model,
+        "label_to_id": label_to_id,
         "aggregate_rankings": aggregate_rankings
     }
 

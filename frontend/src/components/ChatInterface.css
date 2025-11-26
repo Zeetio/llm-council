@@ -109,6 +109,77 @@
   background: #fafafa;
 }
 
+.input-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attached-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #e8f4fd;
+  border: 1px solid #b8daff;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+.file-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-file {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.remove-file:hover {
+  color: #d9534f;
+}
+
+.input-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attach-button {
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.attach-button:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.attach-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .message-input {
   flex: 1;
   padding: 14px;

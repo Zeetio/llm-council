@@ -1,6 +1,28 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './Stage2.css';
+
+// Build a mapping from member id to model name using stage1 results
+function buildIdToModel(stage1Results) {
+  if (!stage1Results) return {};
+  const map = {};
+  stage1Results.forEach((result) => {
+    map[result.id] = result.model;
+  });
+  return map;
+}
+
+// Build labelToModel mapping from labelToId + stage1Results
+function buildLabelToModel(labelToId, stage1Results) {
+  if (!labelToId || !stage1Results) return null;
+  const idToModel = buildIdToModel(stage1Results);
+  const labelToModel = {};
+  Object.entries(labelToId).forEach(([label, id]) => {
+    labelToModel[label] = idToModel[id] || id;
+  });
+  return labelToModel;
+}
 
 function deAnonymizeText(text, labelToModel) {
   if (!labelToModel) return text;
@@ -14,8 +36,20 @@ function deAnonymizeText(text, labelToModel) {
   return result;
 }
 
-export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
+export default function Stage2({ rankings, labelToId, aggregateRankings, stage1Results }) {
   const [activeTab, setActiveTab] = useState(0);
+
+  // Build labelToModel from labelToId + stage1Results
+  const labelToModel = useMemo(
+    () => buildLabelToModel(labelToId, stage1Results),
+    [labelToId, stage1Results]
+  );
+
+  // Build idToModel for aggregate rankings display
+  const idToModel = useMemo(
+    () => buildIdToModel(stage1Results),
+    [stage1Results]
+  );
 
   if (!rankings || rankings.length === 0) {
     return null;
@@ -48,7 +82,7 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
           {rankings[activeTab].model}
         </div>
         <div className="ranking-content markdown-content">
-          <ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {deAnonymizeText(rankings[activeTab].ranking, labelToModel)}
           </ReactMarkdown>
         </div>
@@ -77,20 +111,22 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings }) {
             Combined results across all peer evaluations (lower score is better):
           </p>
           <div className="aggregate-list">
-            {aggregateRankings.map((agg, index) => (
-              <div key={index} className="aggregate-item">
-                <span className="rank-position">#{index + 1}</span>
-                <span className="rank-model">
-                  {agg.model.split('/')[1] || agg.model}
-                </span>
-                <span className="rank-score">
-                  Avg: {agg.average_rank.toFixed(2)}
-                </span>
-                <span className="rank-count">
-                  ({agg.rankings_count} votes)
-                </span>
-              </div>
-            ))}
+            {aggregateRankings.map((agg, index) => {
+              const model = idToModel[agg.id] || agg.id;
+              const modelShortName = model.split('/')[1] || model;
+              return (
+                <div key={index} className="aggregate-item">
+                  <span className="rank-position">#{index + 1}</span>
+                  <span className="rank-model">{modelShortName}</span>
+                  <span className="rank-score">
+                    Avg: {agg.average_rank.toFixed(2)}
+                  </span>
+                  <span className="rank-count">
+                    ({agg.rankings_count} votes)
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

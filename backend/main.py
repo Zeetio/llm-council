@@ -1,8 +1,10 @@
 """FastAPI backend for LLM Council."""
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import uuid
@@ -10,14 +12,16 @@ import json
 import asyncio
 
 from . import storage
+from .config import get_config, save_config
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
 
 app = FastAPI(title="LLM Council API")
 
-# Enable CORS for local development
+# CORS configuration from environment variable (comma-separated origins, or "*" for all)
+allowed_origins = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,8 +54,8 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
-@app.get("/")
-async def root():
+@app.get("/api/health")
+async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "service": "LLM Council API"}
 
@@ -90,8 +94,11 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Get conversation history before adding new message
+    conversation_history = conversation.get("messages", [])
+
     # Check if this is the first message
-    is_first_message = len(conversation["messages"]) == 0
+    is_first_message = len(conversation_history) == 0
 
     # Add user message
     storage.add_user_message(conversation_id, request.content)
@@ -101,9 +108,9 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         title = await generate_conversation_title(request.content)
         storage.update_conversation_title(conversation_id, title)
 
-    # Run the 3-stage council process
+    # Run the 3-stage council process with conversation history
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
+        request.content, conversation_history
     )
 
     # Add assistant message with all stages
@@ -134,8 +141,11 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Get conversation history before adding new message
+    conversation_history = conversation.get("messages", [])
+
     # Check if this is the first message
-    is_first_message = len(conversation["messages"]) == 0
+    is_first_message = len(conversation_history) == 0
 
     async def event_generator():
         try:
@@ -147,16 +157,16 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses
+            # Stage 1: Collect responses with conversation history
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
+            stage1_results = await stage1_collect_responses(request.content, conversation_history)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            stage2_results, label_to_id = await stage2_collect_rankings(request.content, stage1_results)
+            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_id': label_to_id, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
@@ -192,6 +202,25 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             "Connection": "keep-alive",
         }
     )
+
+
+@app.get("/api/config")
+async def get_council_config():
+    """Get current council configuration."""
+    return get_config()
+
+
+@app.put("/api/config")
+async def update_council_config(config: Dict[str, Any]):
+    """Update council configuration."""
+    save_config(config)
+    return {"status": "ok", "config": config}
+
+
+# Mount frontend static files (must be after all API routes)
+# Only mount if frontend_dist directory exists (Cloud Run deployment)
+if os.path.isdir("frontend_dist"):
+    app.mount("/", StaticFiles(directory="frontend_dist", html=True), name="static")
 
 
 if __name__ == "__main__":

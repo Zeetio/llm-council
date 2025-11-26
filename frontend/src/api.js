@@ -2,7 +2,8 @@
  * API client for the LLM Council backend.
  */
 
-const API_BASE = 'http://localhost:8001';
+// Use VITE_API_BASE env var for local dev, empty string for same-origin (Cloud Run)
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export const api = {
   /**
@@ -62,6 +63,34 @@ export const api = {
     );
     if (!response.ok) {
       throw new Error('Failed to send message');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get council configuration.
+   */
+  async getConfig() {
+    const response = await fetch(`${API_BASE}/api/config`);
+    if (!response.ok) {
+      throw new Error('Failed to get config');
+    }
+    return response.json();
+  },
+
+  /**
+   * Update council configuration.
+   */
+  async updateConfig(config) {
+    const response = await fetch(`${API_BASE}/api/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update config');
     }
     return response.json();
   },

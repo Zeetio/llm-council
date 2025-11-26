@@ -1,0 +1,37 @@
+# Virtual environment
+.venv
+venv
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# Environment files (secrets)
+.env
+*.env
+
+# Local data (ephemeral in Cloud Run anyway)
+data/
+
+# Node modules (frontend builds in container)
+node_modules
+frontend/node_modules
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Build artifacts
+frontend/dist
+frontend_dist
+
+# Design docs
+design/
+
+# Claude plans
+.claude/
