@@ -1,7 +1,15 @@
 """FastAPI backend for LLM Council."""
 
 import os
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI, HTTPException, Query
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +41,11 @@ class CreateConversationRequest(BaseModel):
     pass
 
 
+class CreateProjectRequest(BaseModel):
+    """Request to create a new project."""
+    project_id: str
+
+
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation."""
     content: str
@@ -61,36 +74,36 @@ async def health_check():
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
-async def list_conversations():
+async def list_conversations(project_id: str = Query("default", alias="project_id")):
     """List all conversations (metadata only)."""
-    return storage.list_conversations()
+    return storage.list_conversations(project_id)
 
 
 @app.post("/api/conversations", response_model=Conversation)
-async def create_conversation(request: CreateConversationRequest):
+async def create_conversation(request: CreateConversationRequest, project_id: str = Query("default", alias="project_id")):
     """Create a new conversation."""
     conversation_id = str(uuid.uuid4())
-    conversation = storage.create_conversation(conversation_id)
+    conversation = storage.create_conversation(conversation_id, project_id)
     return conversation
 
 
 @app.get("/api/conversations/{conversation_id}", response_model=Conversation)
-async def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str, project_id: str = Query("default", alias="project_id")):
     """Get a specific conversation with all its messages."""
-    conversation = storage.get_conversation(conversation_id)
+    conversation = storage.get_conversation(conversation_id, project_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
 @app.post("/api/conversations/{conversation_id}/message")
-async def send_message(conversation_id: str, request: SendMessageRequest):
+async def send_message(conversation_id: str, request: SendMessageRequest, project_id: str = Query("default", alias="project_id")):
     """
     Send a message and run the 3-stage council process.
     Returns the complete response with all stages.
     """
     # Check if conversation exists
-    conversation = storage.get_conversation(conversation_id)
+    conversation = storage.get_conversation(conversation_id, project_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -101,16 +114,16 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
     is_first_message = len(conversation_history) == 0
 
     # Add user message
-    storage.add_user_message(conversation_id, request.content)
+    storage.add_user_message(conversation_id, request.content, project_id)
 
     # If this is the first message, generate a title
     if is_first_message:
         title = await generate_conversation_title(request.content)
-        storage.update_conversation_title(conversation_id, title)
+        storage.update_conversation_title(conversation_id, title, project_id)
 
     # Run the 3-stage council process with conversation history
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content, conversation_history
+        request.content, conversation_history, project_id
     )
 
     # Add assistant message with all stages
@@ -118,7 +131,8 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         conversation_id,
         stage1_results,
         stage2_results,
-        stage3_result
+        stage3_result,
+        project_id
     )
 
     # Return the complete response with metadata
@@ -131,13 +145,13 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
-async def send_message_stream(conversation_id: str, request: SendMessageRequest):
+async def send_message_stream(conversation_id: str, request: SendMessageRequest, project_id: str = Query("default", alias="project_id")):
     """
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
     """
     # Check if conversation exists
-    conversation = storage.get_conversation(conversation_id)
+    conversation = storage.get_conversation(conversation_id, project_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -149,8 +163,10 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
     async def event_generator():
         try:
+            logger.info(f"[{conversation_id[:8]}] Starting council process")
+
             # Add user message
-            storage.add_user_message(conversation_id, request.content)
+            storage.add_user_message(conversation_id, request.content, project_id)
 
             # Start title generation in parallel (don't await yet)
             title_task = None
@@ -158,25 +174,31 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
             # Stage 1: Collect responses with conversation history
+            logger.info(f"[{conversation_id[:8]}] Stage 1: Starting")
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content, conversation_history)
+            stage1_results = await stage1_collect_responses(request.content, conversation_history, project_id)
+            logger.info(f"[{conversation_id[:8]}] Stage 1: Complete ({len(stage1_results)} responses)")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
+            logger.info(f"[{conversation_id[:8]}] Stage 2: Starting")
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_id = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_id = await stage2_collect_rankings(request.content, stage1_results, project_id)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
+            logger.info(f"[{conversation_id[:8]}] Stage 2: Complete ({len(stage2_results)} rankings)")
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_id': label_to_id, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
+            logger.info(f"[{conversation_id[:8]}] Stage 3: Starting")
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results, project_id)
+            logger.info(f"[{conversation_id[:8]}] Stage 3: Complete")
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started
             if title_task:
                 title = await title_task
-                storage.update_conversation_title(conversation_id, title)
+                storage.update_conversation_title(conversation_id, title, project_id)
                 yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
 
             # Save complete assistant message
@@ -184,13 +206,16 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 conversation_id,
                 stage1_results,
                 stage2_results,
-                stage3_result
+                stage3_result,
+                project_id
             )
 
             # Send completion event
+            logger.info(f"[{conversation_id[:8]}] Council process complete")
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
         except Exception as e:
+            logger.error(f"[{conversation_id[:8]}] Error: {e}")
             # Send error event
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -205,16 +230,35 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
 
 @app.get("/api/config")
-async def get_council_config():
+async def get_council_config(project_id: str = Query("default", alias="project_id")):
     """Get current council configuration."""
-    return get_config()
+    return get_config(project_id)
 
 
 @app.put("/api/config")
-async def update_council_config(config: Dict[str, Any]):
+async def update_council_config(config: Dict[str, Any], project_id: str = Query("default", alias="project_id")):
     """Update council configuration."""
-    save_config(config)
+    save_config(config, project_id)
     return {"status": "ok", "config": config}
+
+
+@app.get("/api/projects")
+async def list_projects_api():
+    """List available projects."""
+    return storage.list_projects()
+
+
+@app.post("/api/projects")
+async def create_project_api(request: CreateProjectRequest):
+    """Create a new project."""
+    return storage.create_project(request.project_id)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project_api(project_id: str):
+    """Delete a project and all its data."""
+    storage.delete_project(project_id)
+    return {"status": "deleted", "project_id": project_id}
 
 
 # Mount frontend static files (must be after all API routes)

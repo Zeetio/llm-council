@@ -1,7 +1,8 @@
-# CLAUDE.md - Technical Notes for LLM Council
+# CLAUDE.md
 
 英語で思考して日本語で回答
-This file contains technical details, architectural decisions, and important implementation notes for future development sessions.
+
+追加指示やユーザーが修正をわざわざしてきたものに対して、CLAUDE.mdに追記していって、同じ間違いをしないようにする
 
 ## Project Overview
 

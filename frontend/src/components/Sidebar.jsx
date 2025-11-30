@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -7,6 +6,12 @@ export default function Sidebar({
   onSelectConversation,
   onNewConversation,
   onOpenSettings,
+  projectId,
+  onProjectChange,
+  projects,
+  onRefreshProjects,
+  onDeleteProject,
+  onCreateProject,
 }) {
   return (
     <div className="sidebar">
@@ -23,6 +28,37 @@ export default function Sidebar({
         <button className="new-conversation-btn" onClick={onNewConversation}>
           + New Conversation
         </button>
+
+        <div className="project-selector">
+          <label htmlFor="project-id">Project</label>
+          <div className="project-row">
+            <select
+              id="project-id"
+              value={projectId}
+              onChange={(e) => onProjectChange(e.target.value)}
+            >
+              {[...new Set(['default', ...(projects || [])])].map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <button className="icon-btn" onClick={onCreateProject} title="New project">
+              +
+            </button>
+            <button className="icon-btn" onClick={onRefreshProjects} title="Refresh projects">
+              ↻
+            </button>
+            <button
+              className="icon-btn danger"
+              onClick={onDeleteProject}
+              title="Delete current project"
+              disabled={projectId === 'default'}
+            >
+              🗑
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="conversation-list">

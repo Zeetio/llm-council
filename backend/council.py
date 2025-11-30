@@ -1,13 +1,17 @@
 """3-stage LLM Council orchestration."""
 
+import logging
 from typing import List, Dict, Any, Tuple
 from .openrouter import query_members_parallel, query_model
 from .config import get_council_members, get_chairman
 
+logger = logging.getLogger(__name__)
+
 
 async def stage1_collect_responses(
     user_query: str,
-    conversation_history: List[Dict[str, Any]] = None
+    conversation_history: List[Dict[str, Any]] = None,
+    project_id: str = "default"
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council members.
@@ -34,7 +38,8 @@ async def stage1_collect_responses(
     messages.append({"role": "user", "content": user_query})
 
     # Get council members from config
-    members = get_council_members()
+    members = get_council_members(project_id)
+    logger.info(f"Stage 1: Querying {len(members)} models")
 
     # Query all members in parallel
     responses = await query_members_parallel(members, messages)
@@ -52,13 +57,17 @@ async def stage1_collect_responses(
                 "model": member.get("model", "unknown"),
                 "response": response.get('content', '')
             })
+        else:
+            logger.warning(f"Stage 1: Model {member_id} failed to respond")
 
+    logger.info(f"Stage 1: Got {len(stage1_results)}/{len(members)} responses")
     return stage1_results
 
 
 async def stage2_collect_rankings(
     user_query: str,
-    stage1_results: List[Dict[str, Any]]
+    stage1_results: List[Dict[str, Any]],
+    project_id: str = "default"
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each member ranks the anonymized responses.
@@ -119,7 +128,8 @@ Now provide your evaluation and ranking:"""
     messages = [{"role": "user", "content": ranking_prompt}]
 
     # Get council members from config
-    members = get_council_members()
+    members = get_council_members(project_id)
+    logger.info(f"Stage 2: Requesting rankings from {len(members)} models")
 
     # Get rankings from all council members in parallel
     responses = await query_members_parallel(members, messages)
@@ -140,14 +150,18 @@ Now provide your evaluation and ranking:"""
                 "ranking": full_text,
                 "parsed_ranking": parsed
             })
+        else:
+            logger.warning(f"Stage 2: Model {member_id} failed to rank")
 
+    logger.info(f"Stage 2: Got {len(stage2_results)}/{len(members)} rankings")
     return stage2_results, label_to_id
 
 
 async def stage3_synthesize_final(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
+    stage2_results: List[Dict[str, Any]],
+    project_id: str = "default"
 ) -> Dict[str, Any]:
     """
     Stage 3: Chairman synthesizes final response.
@@ -161,7 +175,7 @@ async def stage3_synthesize_final(
         Dict with 'id', 'name', 'model' and 'response' keys
     """
     # Get chairman config
-    chairman = get_chairman()
+    chairman = get_chairman(project_id)
 
     # Build comprehensive context for chairman
     stage1_text = "\n\n".join([
@@ -192,6 +206,7 @@ Your task as Chairman is to synthesize all of this information into a single, co
 Provide a clear, well-reasoned final answer that represents the council's collective wisdom:"""
 
     messages = [{"role": "user", "content": chairman_prompt}]
+    logger.info(f"Stage 3: Chairman ({chairman['model']}) synthesizing")
 
     # Query the chairman model with its system prompt
     response = await query_model(
@@ -201,6 +216,7 @@ Provide a clear, well-reasoned final answer that represents the council's collec
     )
 
     if response is None:
+        logger.error("Stage 3: Chairman failed to synthesize")
         # Fallback if chairman fails
         return {
             "id": chairman["id"],
@@ -209,6 +225,7 @@ Provide a clear, well-reasoned final answer that represents the council's collec
             "response": "Error: Unable to generate final synthesis."
         }
 
+    logger.info("Stage 3: Chairman synthesis complete")
     return {
         "id": chairman["id"],
         "name": chairman.get("name", "Chairman"),
@@ -338,7 +355,8 @@ Title:"""
 
 async def run_full_council(
     user_query: str,
-    conversation_history: List[Dict[str, Any]] = None
+    conversation_history: List[Dict[str, Any]] = None,
+    project_id: str = "default"
 ) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
@@ -351,7 +369,7 @@ async def run_full_council(
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query, conversation_history)
+    stage1_results = await stage1_collect_responses(user_query, conversation_history, project_id)
 
     # If no members responded successfully, return error
     if not stage1_results:
@@ -363,7 +381,7 @@ async def run_full_council(
         }, {}
 
     # Stage 2: Collect rankings
-    stage2_results, label_to_id = await stage2_collect_rankings(user_query, stage1_results)
+    stage2_results, label_to_id = await stage2_collect_rankings(user_query, stage1_results, project_id)
 
     # Calculate aggregate rankings
     aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
@@ -372,7 +390,8 @@ async def run_full_council(
     stage3_result = await stage3_synthesize_final(
         user_query,
         stage1_results,
-        stage2_results
+        stage2_results,
+        project_id
     )
 
     # Prepare metadata

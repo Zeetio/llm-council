@@ -5,12 +5,28 @@
 // Use VITE_API_BASE env var for local dev, empty string for same-origin (Cloud Run)
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+let projectId = localStorage.getItem('project_id') || 'default';
+
+export function setProjectId(id) {
+  projectId = id || 'default';
+  localStorage.setItem('project_id', projectId);
+}
+
+export function getProjectId() {
+  return projectId;
+}
+
+function withProject(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}project_id=${encodeURIComponent(projectId)}`;
+}
+
 export const api = {
   /**
    * List all conversations.
    */
   async listConversations() {
-    const response = await fetch(`${API_BASE}/api/conversations`);
+    const response = await fetch(withProject(`${API_BASE}/api/conversations`));
     if (!response.ok) {
       throw new Error('Failed to list conversations');
     }
@@ -21,7 +37,7 @@ export const api = {
    * Create a new conversation.
    */
   async createConversation() {
-    const response = await fetch(`${API_BASE}/api/conversations`, {
+    const response = await fetch(withProject(`${API_BASE}/api/conversations`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,7 +55,7 @@ export const api = {
    */
   async getConversation(conversationId) {
     const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}`
+      withProject(`${API_BASE}/api/conversations/${conversationId}`)
     );
     if (!response.ok) {
       throw new Error('Failed to get conversation');
@@ -52,7 +68,7 @@ export const api = {
    */
   async sendMessage(conversationId, content) {
     const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message`,
+      withProject(`${API_BASE}/api/conversations/${conversationId}/message`),
       {
         method: 'POST',
         headers: {
@@ -71,7 +87,7 @@ export const api = {
    * Get council configuration.
    */
   async getConfig() {
-    const response = await fetch(`${API_BASE}/api/config`);
+    const response = await fetch(withProject(`${API_BASE}/api/config`));
     if (!response.ok) {
       throw new Error('Failed to get config');
     }
@@ -82,7 +98,7 @@ export const api = {
    * Update council configuration.
    */
   async updateConfig(config) {
-    const response = await fetch(`${API_BASE}/api/config`, {
+    const response = await fetch(withProject(`${API_BASE}/api/config`), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -96,6 +112,47 @@ export const api = {
   },
 
   /**
+   * List projects.
+   */
+  async listProjects() {
+    const response = await fetch(`${API_BASE}/api/projects`);
+    if (!response.ok) {
+      throw new Error('Failed to list projects');
+    }
+    return response.json();
+  },
+
+  /**
+   * Create a new project.
+   */
+  async createProject(projectId) {
+    const response = await fetch(`${API_BASE}/api/projects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ project_id: projectId }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to create project');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a project.
+   */
+  async deleteProject(id) {
+    const response = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete project');
+    }
+    return response.json();
+  },
+
+  /**
    * Send a message and receive streaming updates.
    * @param {string} conversationId - The conversation ID
    * @param {string} content - The message content
@@ -104,7 +161,7 @@ export const api = {
    */
   async sendMessageStream(conversationId, content, onEvent) {
     const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message/stream`,
+      withProject(`${API_BASE}/api/conversations/${conversationId}/message/stream`),
       {
         method: 'POST',
         headers: {

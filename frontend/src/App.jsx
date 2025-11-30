@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
-import { api } from './api';
+import { api, setProjectId as apiSetProjectId, getProjectId as apiGetProjectId } from './api';
 import './App.css';
 
 function App() {
@@ -11,11 +11,24 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [projectId, setProjectId] = useState(apiGetProjectId());
+  const [projects, setProjects] = useState([]);
 
   // Load conversations on mount
   useEffect(() => {
+    apiSetProjectId(projectId);
     loadConversations();
-  }, []);
+    loadProjects();
+  }, [projectId]);
+
+  const loadProjects = async () => {
+    try {
+      const list = await api.listProjects();
+      setProjects(list.includes(projectId) ? list : [projectId, ...list]);
+    } catch (error) {
+      console.error('Failed to list projects:', error);
+    }
+  };
 
   // Load conversation details when selected
   useEffect(() => {
@@ -57,6 +70,39 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+  };
+
+  const handleProjectChange = (id) => {
+    const next = id?.trim() || 'default';
+    setProjectId(next);
+    setCurrentConversationId(null);
+    setCurrentConversation(null);
+  };
+
+  const handleDeleteProject = async () => {
+    const target = projectId;
+    try {
+      await api.deleteProject(target);
+      setProjectId('default');
+      setCurrentConversation(null);
+      setCurrentConversationId(null);
+      loadProjects();
+      loadConversations();
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    const name = prompt('Enter new project name:');
+    if (!name || !name.trim()) return;
+    try {
+      await api.createProject(name.trim());
+      await loadProjects();
+      setProjectId(name.trim());
+    } catch (error) {
+      console.error('Failed to create project:', error);
+    }
   };
 
   const handleSendMessage = async (content) => {
@@ -191,6 +237,12 @@ function App() {
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
         onOpenSettings={() => setShowSettings(true)}
+        projectId={projectId}
+        onProjectChange={handleProjectChange}
+        projects={projects}
+        onRefreshProjects={loadProjects}
+        onDeleteProject={handleDeleteProject}
+        onCreateProject={handleCreateProject}
       />
       <ChatInterface
         conversation={currentConversation}

@@ -1,9 +1,9 @@
-"""Configuration for the LLM Council."""
+"""Configuration helpers (project-aware)."""
 
 import os
-import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from dotenv import load_dotenv
+from . import storage
 
 load_dotenv()
 
@@ -12,12 +12,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Data directory for conversation storage
-DATA_DIR = "data/conversations"
-
-# Config file path
-CONFIG_FILE = "data/council_config.json"
 
 # Default council configuration
 DEFAULT_CONFIG = {
@@ -56,36 +50,21 @@ DEFAULT_CONFIG = {
 }
 
 
-def get_config() -> Dict[str, Any]:
-    """Load council configuration from JSON file, or return defaults."""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-    return DEFAULT_CONFIG.copy()
+def get_config(project_id: str = "default") -> Dict[str, Any]:
+    """Load council configuration for a project, or return defaults."""
+    return storage.get_config(project_id, DEFAULT_CONFIG)
 
 
-def save_config(config: Dict[str, Any]) -> None:
-    """Save council configuration to JSON file."""
-    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+def save_config(config: Dict[str, Any], project_id: str = "default") -> None:
+    """Save council configuration for a project."""
+    storage.save_config(config, project_id)
 
 
-def get_council_members() -> List[Dict[str, Any]]:
-    """Get list of council members from config."""
-    config = get_config()
+def get_council_members(project_id: str = "default") -> List[Dict[str, Any]]:
+    config = get_config(project_id)
     return config.get("council_members", DEFAULT_CONFIG["council_members"])
 
 
-def get_chairman() -> Dict[str, Any]:
-    """Get chairman configuration."""
-    config = get_config()
+def get_chairman(project_id: str = "default") -> Dict[str, Any]:
+    config = get_config(project_id)
     return config.get("chairman", DEFAULT_CONFIG["chairman"])
-
-
-# Legacy compatibility - will be removed later
-COUNCIL_MODELS = [m["model"] for m in DEFAULT_CONFIG["council_members"]]
-CHAIRMAN_MODEL = DEFAULT_CONFIG["chairman"]["model"]
