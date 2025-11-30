@@ -48,6 +48,11 @@ class LocalStorage:
         if os.path.isdir(path):
             shutil.rmtree(path, ignore_errors=True)
 
+    def create_project(self, project_id: str):
+        # Ensure directories exist
+        self._ensure_dir(self._conv_dir(project_id))
+        self._ensure_dir(os.path.dirname(self._config_path(project_id)))
+
     def create_project(self, project_id: str) -> Dict[str, str]:
         path = os.path.join(self.base_project_dir, project_id)
         self._ensure_dir(path)
@@ -209,6 +214,11 @@ class GCSStorage:
         if blobs:
             self.bucket.delete_blobs(blobs)
 
+    def create_project(self, project_id: str):
+        # Create placeholder to ensure project appears in listings
+        placeholder = self.bucket.blob(self._path(project_id, "", ".keep"))
+        placeholder.upload_from_string("", content_type="text/plain")
+
     def create_project(self, project_id: str) -> Dict[str, str]:
         # Create an empty config to mark project existence
         self.save_config(project_id, {})
@@ -303,6 +313,10 @@ def list_projects() -> List[str]:
 
 def delete_project(project_id: str):
     return _get_backend().delete_project(project_id)
+
+
+def create_project(project_id: str):
+    return _get_backend().create_project(project_id)
 
 
 def create_project(project_id: str) -> Dict[str, str]:

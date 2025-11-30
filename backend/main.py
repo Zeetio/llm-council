@@ -251,12 +251,18 @@ async def list_projects_api():
 @app.post("/api/projects")
 async def create_project_api(request: CreateProjectRequest):
     """Create a new project."""
-    return storage.create_project(request.project_id)
+    pid = (request.project_id or "").strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="project_id required")
+    storage.create_project(pid)
+    return {"status": "ok", "project_id": pid}
 
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project_api(project_id: str):
     """Delete a project and all its data."""
+    if project_id == "default":
+        raise HTTPException(status_code=400, detail="Cannot delete default project")
     storage.delete_project(project_id)
     return {"status": "deleted", "project_id": project_id}
 
