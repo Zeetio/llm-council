@@ -51,8 +51,15 @@ DEFAULT_CONFIG = {
 
 
 def get_config(project_id: str = "default") -> Dict[str, Any]:
-    """Load council configuration for a project, or return defaults."""
-    return storage.get_config(project_id, DEFAULT_CONFIG)
+    """Load council configuration for a project, merged with defaults."""
+    stored = storage.get_config(project_id, DEFAULT_CONFIG)
+    # Merge with defaults to ensure all required fields exist
+    result = DEFAULT_CONFIG.copy()
+    if stored.get("council_members"):
+        result["council_members"] = stored["council_members"]
+    if stored.get("chairman"):
+        result["chairman"] = stored["chairman"]
+    return result
 
 
 def save_config(config: Dict[str, Any], project_id: str = "default") -> None:

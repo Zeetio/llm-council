@@ -81,13 +81,15 @@ function App() {
 
   const handleDeleteProject = async () => {
     const target = projectId;
+    if (target === 'default') return;
+    if (!confirm(`Delete project "${target}"?`)) return;
     try {
       await api.deleteProject(target);
       setProjectId('default');
       setCurrentConversation(null);
       setCurrentConversationId(null);
-      loadProjects();
-      loadConversations();
+      await loadProjects();
+      await loadConversations();
     } catch (error) {
       console.error('Failed to delete project:', error);
     }
