@@ -143,6 +143,14 @@ async def get_conversation(conversation_id: str, project_id: str = Query("defaul
     return conversation
 
 
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, project_id: str = Query("default", alias="project_id")):
+    """会話を削除"""
+    if not storage.delete_conversation(conversation_id, project_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "deleted", "conversation_id": conversation_id}
+
+
 @app.post("/api/conversations/{conversation_id}/message")
 async def send_message(conversation_id: str, request: SendMessageRequest, project_id: str = Query("default", alias="project_id")):
     """

@@ -206,6 +206,22 @@ function App() {
     }
   };
 
+  // 会話削除ハンドラー
+  const handleDeleteConversation = async (conversationId, title) => {
+    if (!confirm(`「${title || 'New Conversation'}」を削除しますか？`)) return;
+    try {
+      await api.deleteConversation(conversationId);
+      await loadConversations();
+      // 削除した会話が現在選択中の場合は選択を解除
+      if (currentConversationId === conversationId) {
+        setCurrentConversationId(null);
+        setCurrentConversation(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
   // コメント追加ハンドラー
   const handleAddComment = ({ selectedText, comment }) => {
     const newComment = {
@@ -417,6 +433,7 @@ function App() {
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
         onOpenSettings={() => setShowSettings(true)}
+        onDeleteConversation={handleDeleteConversation}
         projectId={projectId}
         onProjectChange={handleProjectChange}
         projects={projects}

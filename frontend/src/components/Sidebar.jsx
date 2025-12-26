@@ -6,6 +6,7 @@ export default function Sidebar({
   onSelectConversation,
   onNewConversation,
   onOpenSettings,
+  onDeleteConversation,
   projectId,
   onProjectChange,
   projects,
@@ -73,12 +74,24 @@ export default function Sidebar({
               }`}
               onClick={() => onSelectConversation(conv.id)}
             >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
+              <div className="conversation-content">
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {conv.message_count} messages
+                </div>
               </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
-              </div>
+              <button
+                className="conversation-delete-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteConversation(conv.id, conv.title);
+                }}
+                title="削除"
+              >
+                ×
+              </button>
             </div>
           ))
         )}

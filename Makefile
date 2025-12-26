@@ -1,10 +1,21 @@
 # ==============================================================================
-# LLM Council - ローカル開発用 Makefile
+# LLM Council - Makefile
 # ==============================================================================
 # 使用方法: make help
 
-.PHONY: help install install-dev dev-backend dev-frontend dev test test-unit lint build docker-build docker-run clean \
-        secret-create secret-update secret-list secret-delete deploy deploy-with-gcs deploy-status deploy-logs deploy-url iam-setup
+.PHONY: help \
+        install install-dev install-frontend install-all \
+        dev dev-backend dev-frontend \
+        test test-unit test-memory test-cov \
+        lint build build-check \
+        docker-build docker-run docker-run-detached docker-stop docker-logs docker-shell docker-push \
+        ar-setup \
+        clean clean-all \
+        data-backup data-reset \
+        deploy deploy-with-gcs deploy-status deploy-logs deploy-url \
+        secret-create-openrouter secret-create-tavily secret-update-openrouter secret-update-tavily secret-list \
+        iam-setup gcs-cleanup gcs-delete-bucket \
+        env-check status
 
 # デフォルトターゲット
 .DEFAULT_GOAL := help
@@ -23,20 +34,21 @@ FRONTEND_PORT := 5173
 help: ## このヘルプを表示
 	@echo "LLM Council - 利用可能なコマンド:"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "開発フロー:"
-	@echo "  1. make install-all  - 依存関係をインストール"
-	@echo "  2. make dev          - バックエンド＋フロントエンド同時起動"
+	@echo "  1. make install-all     - 依存関係をインストール"
+	@echo "  2. make dev             - バックエンド＋フロントエンド同時起動"
 	@echo ""
 	@echo "デプロイフロー（初回）:"
-	@echo "  1. make ar-setup        - Artifact Registryをセットアップ"
-	@echo "  2. make secret-create   - Secret Managerにキーを登録"
-	@echo "  3. make deploy          - Cloud Runにデプロイ（--image方式）"
-	@echo "  4. make iam-setup       - 権限設定（必要な場合）"
+	@echo "  1. make ar-setup              - Artifact Registryをセットアップ"
+	@echo "  2. make secret-create-openrouter - OpenRouter APIキーを登録"
+	@echo "  3. make secret-create-tavily  - Tavily APIキーを登録"
+	@echo "  4. make deploy                - Cloud Runにデプロイ"
+	@echo "  5. make iam-setup             - 権限設定（必要な場合）"
 	@echo ""
-	@echo "GCSバケット移行後:"
-	@echo "  make gcs-delete-bucket  - 不要になったGCSバケットを削除"
+	@echo "デプロイフロー（更新）:"
+	@echo "  - make deploy                 - Cloud Runにデプロイ（常にキャッシュなしビルド）"
 	@echo ""
 
 # ------------------------------------------------------------------------------
@@ -128,9 +140,9 @@ docker-logs: ## Dockerコンテナのログを表示
 docker-shell: ## Dockerコンテナにシェルで接続
 	docker exec -it $(DOCKER_IMAGE) /bin/bash
 
-docker-push: ## Artifact RegistryにDockerイメージをpush
-	@echo "=== Artifact Registryにイメージをpush ==="
-	docker build -t $(AR_IMAGE):$(DOCKER_TAG) .
+docker-push: ## Artifact RegistryにDockerイメージをビルド＆push（常にキャッシュなし）
+	@echo "=== キャッシュなしでビルド＆プッシュ ==="
+	docker build --no-cache -t $(AR_IMAGE):$(DOCKER_TAG) .
 	docker push $(AR_IMAGE):$(DOCKER_TAG)
 	@echo "✓ プッシュ完了: $(AR_IMAGE):$(DOCKER_TAG)"
 
@@ -183,27 +195,39 @@ SECRET_OPENROUTER := openrouter-api-key
 SECRET_TAVILY := tavily-api-key
 
 # シークレット管理
-secret-create: ## Secret Managerにシークレットを作成
-	@echo "シークレット '$(SECRET_NAME)' を作成します..."
+secret-create-openrouter: ## OpenRouter APIキーをSecret Managerに作成
+	@echo "シークレット '$(SECRET_OPENROUTER)' を作成します..."
 	@read -p "OPENROUTER_API_KEYを入力: " key && \
-		echo -n "$$key" | gcloud secrets create $(SECRET_NAME) --data-file=- --replication-policy="automatic" || \
-		echo "既に存在する場合は secret-update を使用してください"
+		echo -n "$$key" | gcloud secrets create $(SECRET_OPENROUTER) --data-file=- --replication-policy="automatic" || \
+		echo "既に存在する場合は secret-update-openrouter を使用してください"
 
-secret-update: ## シークレットの値を更新（新バージョン追加）
-	@echo "シークレット '$(SECRET_NAME)' を更新します..."
+secret-create-tavily: ## Tavily APIキーをSecret Managerに作成
+	@echo "シークレット '$(SECRET_TAVILY)' を作成します..."
+	@read -p "TAVILY_API_KEYを入力: " key && \
+		echo -n "$$key" | gcloud secrets create $(SECRET_TAVILY) --data-file=- --replication-policy="automatic" || \
+		echo "既に存在する場合は secret-update-tavily を使用してください"
+
+secret-update-openrouter: ## OpenRouter APIキーを更新
+	@echo "シークレット '$(SECRET_OPENROUTER)' を更新します..."
 	@read -p "新しいOPENROUTER_API_KEYを入力: " key && \
-		echo -n "$$key" | gcloud secrets versions add $(SECRET_NAME) --data-file=-
+		echo -n "$$key" | gcloud secrets versions add $(SECRET_OPENROUTER) --data-file=-
 	@echo "✓ 新しいバージョンが追加されました"
 
-secret-list: ## シークレットのバージョン一覧を表示
-	gcloud secrets versions list $(SECRET_NAME)
+secret-update-tavily: ## Tavily APIキーを更新
+	@echo "シークレット '$(SECRET_TAVILY)' を更新します..."
+	@read -p "新しいTAVILY_API_KEYを入力: " key && \
+		echo -n "$$key" | gcloud secrets versions add $(SECRET_TAVILY) --data-file=-
+	@echo "✓ 新しいバージョンが追加されました"
 
-secret-delete: ## シークレットを削除（注意）
-	@read -p "本当に削除しますか？ [y/N] " confirm && [ "$$confirm" = "y" ] && \
-		gcloud secrets delete $(SECRET_NAME) --quiet || echo "キャンセルしました"
+secret-list: ## シークレット一覧を表示
+	@echo "=== OpenRouter API Key ==="
+	gcloud secrets versions list $(SECRET_OPENROUTER) 2>/dev/null || echo "未作成"
+	@echo ""
+	@echo "=== Tavily API Key ==="
+	gcloud secrets versions list $(SECRET_TAVILY) 2>/dev/null || echo "未作成"
 
 # Cloud Run デプロイ
-deploy: docker-push ## Cloud Runにデプロイ（--image方式・GCSバケット不要）
+deploy: docker-push ## Cloud Runにデプロイ（常にキャッシュなしビルド）
 	@echo "=== GCP Cloud Run デプロイ ==="
 	@echo "プロジェクト: $(GCP_PROJECT)"
 	@echo "リージョン: $(GCP_REGION)"
@@ -215,7 +239,7 @@ deploy: docker-push ## Cloud Runにデプロイ（--image方式・GCSバケッ�
 		--region $(GCP_REGION) \
 		--platform managed \
 		--no-allow-unauthenticated \
-		--set-secrets="OPENROUTER_API_KEY=$(SECRET_NAME):latest" \
+		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--memory 512Mi \
 		--cpu 1 \
 		--min-instances 0 \
@@ -231,7 +255,7 @@ deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定
 		--region $(GCP_REGION) \
 		--platform managed \
 		--no-allow-unauthenticated \
-		--set-secrets="OPENROUTER_API_KEY=$(SECRET_NAME):latest" \
+		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--set-env-vars="STORAGE_BACKEND=gcs,GCS_BUCKET=$$bucket" \
 		--memory 512Mi \
 		--cpu 1 \
@@ -252,10 +276,14 @@ deploy-url: ## デプロイされたサービスのURLを表示
 iam-setup: ## Secret Managerへのアクセス権限を設定
 	@echo "Cloud Runサービスアカウントにシークレットアクセス権限を付与..."
 	@SA=$$(gcloud run services describe $(CLOUD_RUN_SERVICE) --region $(GCP_REGION) --format="value(spec.template.spec.serviceAccountName)" 2>/dev/null || echo "$(GCP_PROJECT)-compute@developer.gserviceaccount.com"); \
-	gcloud secrets add-iam-policy-binding $(SECRET_NAME) \
+	echo "サービスアカウント: $$SA"; \
+	gcloud secrets add-iam-policy-binding $(SECRET_OPENROUTER) \
 		--member="serviceAccount:$$SA" \
-		--role="roles/secretmanager.secretAccessor"
-	@echo "✓ 権限が付与されました"
+		--role="roles/secretmanager.secretAccessor" --quiet && \
+	gcloud secrets add-iam-policy-binding $(SECRET_TAVILY) \
+		--member="serviceAccount:$$SA" \
+		--role="roles/secretmanager.secretAccessor" --quiet
+	@echo "✓ 両シークレットへの権限が付与されました"
 
 gcs-cleanup: ## ソースデプロイ用GCSバケットの古いファイルを削除
 	@echo "=== GCSバケットのクリーンアップ ==="

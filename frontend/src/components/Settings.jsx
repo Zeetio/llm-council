@@ -241,10 +241,17 @@ export default function Settings({ onClose }) {
     );
   }
 
+  // オーバーレイクリックハンドラ（エラー状態用）
+  const handleOverlayClickForError = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!config) {
     return (
-      <div className="settings-overlay" onClick={onClose}>
-        <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="settings-overlay" onClick={handleOverlayClickForError}>
+        <div className="settings-modal">
           <div className="settings-header">
             <h2>Council Settings</h2>
             <button className="close-btn" onClick={onClose}>
@@ -267,9 +274,17 @@ export default function Settings({ onClose }) {
     );
   }
 
+  // オーバーレイクリックでモーダルを閉じる（モーダル内クリックは無視）
+  const handleOverlayClick = (e) => {
+    // クリックがオーバーレイ自体の場合のみ閉じる
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="settings-overlay" onClick={handleOverlayClick}>
+      <div className="settings-modal">
         <div className="settings-header">
           <h2>Council Settings</h2>
           <button className="close-btn" onClick={onClose}>

@@ -141,6 +141,9 @@
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .conversation-item:hover {
@@ -152,13 +155,44 @@
   border: 1px solid var(--accent-blue);
 }
 
+.conversation-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .conversation-title {
   color: var(--text-primary);
   font-size: 14px;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-meta {
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.conversation-delete-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  transition: opacity 0.2s, color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+
+.conversation-item:hover .conversation-delete-btn {
+  opacity: 1;
+}
+
+.conversation-delete-btn:hover {
+  color: var(--accent-red);
+  background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
 }

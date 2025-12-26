@@ -103,6 +103,14 @@ class LocalStorage:
         conversations.sort(key=lambda x: x["created_at"], reverse=True)
         return conversations
 
+    def delete_conversation(self, project_id: str, conversation_id: str) -> bool:
+        """会話を削除"""
+        path = self._conv_path(project_id, conversation_id)
+        if os.path.exists(path):
+            os.remove(path)
+            return True
+        return False
+
     # Config
     def get_config(self, project_id: str, default_config: Dict[str, Any]) -> Dict[str, Any]:
         path = self._config_path(project_id)
@@ -299,6 +307,14 @@ class GCSStorage:
         conversations.sort(key=lambda x: x["created_at"], reverse=True)
         return conversations
 
+    def delete_conversation(self, project_id: str, conversation_id: str) -> bool:
+        """会話を削除"""
+        blob = self.bucket.blob(self._path(project_id, "conversations", f"{conversation_id}.json"))
+        if blob.exists():
+            blob.delete()
+            return True
+        return False
+
     def get_config(self, project_id: str, default_config: Dict[str, Any]) -> Dict[str, Any]:
         blob = self.bucket.blob(self._path(project_id, "", "config.json"))
         if blob.exists():
@@ -482,6 +498,11 @@ def save_conversation(conversation: Dict[str, Any], project_id: str = "default")
 
 def list_conversations(project_id: str = "default") -> List[Dict[str, Any]]:
     return _get_backend().list_conversations(project_id)
+
+
+def delete_conversation(conversation_id: str, project_id: str = "default") -> bool:
+    """会話を削除"""
+    return _get_backend().delete_conversation(project_id, conversation_id)
 
 
 def add_user_message(conversation_id: str, content: str, project_id: str = "default"):

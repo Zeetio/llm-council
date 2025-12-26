@@ -16,7 +16,7 @@ from .config import get_config
 logger = logging.getLogger(__name__)
 
 # デフォルトのユーティリティモデル（安価モデル）
-DEFAULT_UTILITY_MODEL = "deepseek/deepseek-r1-distill-qwen-8b"
+DEFAULT_UTILITY_MODEL = "deepseek/deepseek-r1-distill-llama-8b"
 
 
 def get_utility_model(project_id: str) -> str:

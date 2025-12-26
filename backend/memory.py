@@ -91,7 +91,7 @@ class SessionMetadata(BaseModel):
 class MemorySettings(BaseModel):
     """メモリシステムの設定"""
     enabled: bool = True
-    utility_model: str = "deepseek/deepseek-r1-distill-qwen-8b"  # 安価なモデル
+    utility_model: str = "deepseek/deepseek-r1-distill-llama-8b"  # 安価なモデル
     auto_extract: bool = True       # 自動メモリ抽出
     max_summaries: int = 15         # 保持するサマリー数
     max_history_messages: int = 10  # LLMに送る会話履歴の最大数

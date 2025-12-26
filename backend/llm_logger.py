@@ -55,7 +55,7 @@ class LLMLogger:
         # DeepSeek
         "deepseek/deepseek-chat": {"input": 0.14, "output": 0.28},
         "deepseek/deepseek-chat-v3": {"input": 0.14, "output": 0.28},
-        "deepseek/deepseek-r1-distill-qwen-8b": {"input": 0.03, "output": 0.06},
+        "deepseek/deepseek-r1-distill-llama-8b": {"input": 0.03, "output": 0.06},
 
         # xAI
         "x-ai/grok-4.1-fast": {"input": 1.0, "output": 4.0},
