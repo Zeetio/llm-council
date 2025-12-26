@@ -1,8 +1,10 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './Stage3.css';
 
-export default function Stage3({ finalResponse }) {
+// メモ化してpropsが変わらない限り再レンダーしない
+export default memo(function Stage3({ finalResponse }) {
   if (!finalResponse) {
     return null;
   }
@@ -22,4 +24,4 @@ export default function Stage3({ finalResponse }) {
       </div>
     </div>
   );
-}
+});

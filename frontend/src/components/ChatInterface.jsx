@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Stage1 from './Stage1';
@@ -9,11 +9,77 @@ import TextSelectionCommentPopup from './TextSelectionCommentPopup';
 import { useTextSelection } from '../hooks/useTextSelection';
 import './ChatInterface.css';
 
+// メモ化されたメッセージコンポーネント（ReactMarkdownの不要な再レンダーを防ぐ）
+const MessageItem = memo(function MessageItem({ msg }) {
+  if (msg.role === 'user') {
+    return (
+      <div className="message-group">
+        <div className="user-message">
+          <div className="message-label">You</div>
+          <div className="message-content">
+            <div className="markdown-content">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="message-group">
+      <div className="assistant-message">
+        <div className="message-label">LLM Council</div>
+
+        {/* Stage 1 */}
+        {msg.loading?.stage1 && (
+          <div className="stage-loading">
+            <div className="spinner"></div>
+            <span>Running Stage 1: Collecting individual responses...</span>
+          </div>
+        )}
+        {msg.stage1 && <Stage1 responses={msg.stage1} />}
+
+        {/* Stage 2 */}
+        {msg.loading?.stage2 && (
+          <div className="stage-loading">
+            <div className="spinner"></div>
+            <span>Running Stage 2: Peer rankings...</span>
+          </div>
+        )}
+        {msg.stage2 && (
+          <Stage2
+            rankings={msg.stage2}
+            labelToId={msg.metadata?.label_to_id}
+            aggregateRankings={msg.metadata?.aggregate_rankings}
+            stage1Results={msg.stage1}
+          />
+        )}
+
+        {/* Stage 3 */}
+        {msg.loading?.stage3 && (
+          <div className="stage-loading">
+            <div className="spinner"></div>
+            <span>Running Stage 3: Final synthesis...</span>
+          </div>
+        )}
+        {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
+
+        {/* Usage Stats - Stage3完了後に表示 */}
+        {msg.usage && <UsageStats usage={msg.usage} />}
+      </div>
+    </div>
+  );
+});
+
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
   onAddComment,
+  onDeleteComment,
   onStopGeneration,
   pendingComments = [],
 }) {
@@ -88,15 +154,21 @@ export default function ChatInterface({
 
   // コメント送信ハンドラー
   const handleCommentSubmit = (comment) => {
-    if (onAddComment && selectedText) {
-      onAddComment({
-        selectedText,
-        comment,
-        // メッセージインデックスなどのコンテキスト情報は選択時に取得する必要があるが
-        // 簡略化のため、選択テキストのみを使用
-      });
-    }
+    // 選択テキストを先にキャプチャ（clearSelection前に）
+    const capturedText = selectedText;
+
+    // 先にポップアップを閉じる
     clearSelection();
+
+    // 次のイベントループでコメントを追加（Reactのレンダリングを安定させる）
+    if (onAddComment && capturedText) {
+      setTimeout(() => {
+        onAddComment({
+          selectedText: capturedText,
+          comment,
+        });
+      }, 0);
+    }
   };
 
   // コメントキャンセルハンドラー
@@ -125,61 +197,7 @@ export default function ChatInterface({
           </div>
         ) : (
           conversation.messages.map((msg, index) => (
-            <div key={index} className="message-group">
-              {msg.role === 'user' ? (
-                <div className="user-message">
-                  <div className="message-label">You</div>
-                  <div className="message-content">
-                    <div className="markdown-content">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="assistant-message">
-                  <div className="message-label">LLM Council</div>
-
-                  {/* Stage 1 */}
-                  {msg.loading?.stage1 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 1: Collecting individual responses...</span>
-                    </div>
-                  )}
-                  {msg.stage1 && <Stage1 responses={msg.stage1} />}
-
-                  {/* Stage 2 */}
-                  {msg.loading?.stage2 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 2: Peer rankings...</span>
-                    </div>
-                  )}
-                  {msg.stage2 && (
-                    <Stage2
-                      rankings={msg.stage2}
-                      labelToId={msg.metadata?.label_to_id}
-                      aggregateRankings={msg.metadata?.aggregate_rankings}
-                      stage1Results={msg.stage1}
-                    />
-                  )}
-
-                  {/* Stage 3 */}
-                  {msg.loading?.stage3 && (
-                    <div className="stage-loading">
-                      <div className="spinner"></div>
-                      <span>Running Stage 3: Final synthesis...</span>
-                    </div>
-                  )}
-                  {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
-
-                  {/* Usage Stats - Stage3完了後に表示 */}
-                  {msg.usage && <UsageStats usage={msg.usage} />}
-                </div>
-              )}
-            </div>
+            <MessageItem key={index} msg={msg} />
           ))
         )}
 
@@ -188,16 +206,6 @@ export default function ChatInterface({
             <div className="spinner"></div>
             <span>Consulting the council...</span>
           </div>
-        )}
-
-        {/* テキスト選択時のコメントポップアップ */}
-        {selectedText && anchorRect && (
-          <TextSelectionCommentPopup
-            anchorRect={anchorRect}
-            selectedText={selectedText}
-            onSubmit={handleCommentSubmit}
-            onCancel={handleCommentCancel}
-          />
         )}
 
         <div ref={messagesEndRef} />
@@ -215,9 +223,21 @@ export default function ChatInterface({
           <div className="pending-comments__list">
             {pendingComments.map((c) => (
               <div key={c.id} className="pending-comment">
-                <span className="pending-comment__text">「{c.selectedText.substring(0, 30)}...」</span>
+                <span className="pending-comment__text">
+                  「{c.selectedText?.length > 30 ? c.selectedText.substring(0, 30) + '...' : c.selectedText}」
+                </span>
                 <span className="pending-comment__arrow">→</span>
-                <span className="pending-comment__feedback">{c.comment.substring(0, 50)}{c.comment.length > 50 ? '...' : ''}</span>
+                <span className="pending-comment__feedback">
+                  {c.comment?.length > 50 ? c.comment.substring(0, 50) + '...' : c.comment}
+                </span>
+                <button
+                  type="button"
+                  className="pending-comment__delete"
+                  onClick={() => onDeleteComment(c.id)}
+                  title="削除"
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
@@ -289,6 +309,16 @@ export default function ChatInterface({
           )}
         </div>
       </form>
+
+      {/* テキスト選択時のコメントポップアップ（position: fixedなのでどこに配置しても良い） */}
+      {selectedText && anchorRect && (
+        <TextSelectionCommentPopup
+          anchorRect={anchorRect}
+          selectedText={selectedText}
+          onSubmit={handleCommentSubmit}
+          onCancel={handleCommentCancel}
+        />
+      )}
     </div>
   );
 }

@@ -234,6 +234,11 @@ function App() {
     console.log('Comment added:', newComment);
   };
 
+  // コメント削除ハンドラー
+  const handleDeleteComment = (commentId) => {
+    setUserComments((prev) => prev.filter((c) => c.id !== commentId));
+  };
+
   // 生成を停止する
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
@@ -446,6 +451,7 @@ function App() {
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
         onAddComment={handleAddComment}
+        onDeleteComment={handleDeleteComment}
         onStopGeneration={handleStopGeneration}
         pendingComments={userComments}
       />

@@ -29,10 +29,6 @@ export function useTextSelection(containerRef) {
 
     if (text.length > 0) {
       const rect = range.getBoundingClientRect();
-      const containerRect = containerRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
-      // コンテナの内部スクロール位置を取得
-      const scrollTop = containerRef.current?.scrollTop || 0;
-      const scrollLeft = containerRef.current?.scrollLeft || 0;
 
       // 選択直後フラグを立てる（クリックイベントがすぐ後に来るのを防ぐ）
       justSelectedRef.current = true;
@@ -41,14 +37,14 @@ export function useTextSelection(containerRef) {
       }, 200); // 200ms間は選択直後とみなす
 
       setSelectedText(text);
+      // ビューポート相対座標のみを使用（position: fixedで配置するため）
       setAnchorRect({
-        // コンテナ相対位置（内部スクロール考慮）
-        top: rect.bottom - containerRect.top + scrollTop,
-        left: rect.left - containerRect.left + scrollLeft,
+        top: rect.top,
+        left: rect.left,
+        right: rect.right,
+        bottom: rect.bottom,
         width: rect.width,
-        // 絶対位置（ウィンドウスクロール考慮）
-        absoluteTop: rect.bottom + window.scrollY,
-        absoluteLeft: rect.left + window.scrollX,
+        height: rect.height,
       });
     }
   }, [containerRef]);

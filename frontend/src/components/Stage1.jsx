@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './Stage1.css';
 
-export default function Stage1({ responses }) {
+// メモ化してpropsが変わらない限り再レンダーしない
+export default memo(function Stage1({ responses }) {
   const [activeTab, setActiveTab] = useState(0);
 
   if (!responses || responses.length === 0) {
@@ -36,4 +37,4 @@ export default function Stage1({ responses }) {
       </div>
     </div>
   );
-}
+});

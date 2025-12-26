@@ -1,13 +1,13 @@
 .comment-popup {
-  position: absolute;
-  z-index: 1000;
+  position: fixed;
+  z-index: 10000;
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 8px;
   box-shadow: var(--shadow-popup);
   padding: 12px;
-  min-width: 300px;
-  max-width: 400px;
+  width: 320px;
+  max-width: calc(100vw - 16px);
 }
 
 .comment-popup__selected-text {

@@ -240,10 +240,10 @@ deploy: docker-push ## Cloud Runにデプロイ（常にキャッシュなしビ
 		--platform managed \
 		--no-allow-unauthenticated \
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
-		--memory 512Mi \
+		--memory 4Gi \
 		--cpu 1 \
 		--min-instances 0 \
-		--max-instances 10
+		--max-instances 1
 	@echo ""
 	@echo "✓ デプロイ完了（IAM認証有効）"
 	@echo "アクセスするには: gcloud run services proxy $(CLOUD_RUN_SERVICE) --region $(GCP_REGION)"
@@ -257,10 +257,10 @@ deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定
 		--no-allow-unauthenticated \
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--set-env-vars="STORAGE_BACKEND=gcs,GCS_BUCKET=$$bucket" \
-		--memory 512Mi \
-		--cpu 1 \
+		--memory 8Gi \
+		--cpu 2 \
 		--min-instances 0 \
-		--max-instances 10
+		--max-instances 2
 
 deploy-status: ## デプロイ状況を確認
 	gcloud run services describe $(CLOUD_RUN_SERVICE) --region $(GCP_REGION) --format="yaml(status)"

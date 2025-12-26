@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './Stage2.css';
+
+// メモ化してpropsが変わらない限り再レンダーしない
 
 // Build a mapping from member id to model name using stage1 results
 function buildIdToModel(stage1Results) {
@@ -36,7 +38,7 @@ function deAnonymizeText(text, labelToModel) {
   return result;
 }
 
-export default function Stage2({ rankings, labelToId, aggregateRankings, stage1Results }) {
+export default memo(function Stage2({ rankings, labelToId, aggregateRankings, stage1Results }) {
   const [activeTab, setActiveTab] = useState(0);
 
   // Build labelToModel from labelToId + stage1Results
@@ -132,4 +134,4 @@ export default function Stage2({ rankings, labelToId, aggregateRankings, stage1R
       )}
     </div>
   );
-}
+});
