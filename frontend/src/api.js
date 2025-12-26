@@ -319,24 +319,54 @@ export const api = {
     }
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    // stream: true でマルチバイト文字の分断を正しく処理
+    const decoder = new TextDecoder('utf-8', { stream: true });
+    // 不完全なSSEイベントを保持するバッファ
+    let buffer = '';
 
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        if (done) {
+          // ストリーム終了時、バッファに残ったデータがあれば警告
+          if (buffer.trim()) {
+            console.warn('SSE stream ended with incomplete data in buffer:', buffer);
+          }
+          break;
+        }
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            try {
-              const event = JSON.parse(data);
-              onEvent(event.type, event);
-            } catch (e) {
-              console.error('Failed to parse SSE event:', e);
+        // チャンクをデコードしてバッファに追加
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSEイベントは '\n\n' で区切られる
+        // バッファから完全なイベントを抽出して処理
+        let eventEndIndex;
+        while ((eventEndIndex = buffer.indexOf('\n\n')) !== -1) {
+          // 完全なイベント部分を取り出す
+          const eventBlock = buffer.slice(0, eventEndIndex);
+          // バッファを更新（処理済み部分を削除）
+          buffer = buffer.slice(eventEndIndex + 2);
+
+          // イベントブロックを行ごとに処理
+          const lines = eventBlock.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              // 空データはスキップ
+              if (!data) continue;
+
+              try {
+                const event = JSON.parse(data);
+                onEvent(event.type, event);
+              } catch (e) {
+                // JSONパースエラー時は詳細をログ出力
+                console.error('Failed to parse SSE event JSON:', {
+                  error: e.message,
+                  dataPreview: data.length > 200 ? data.slice(0, 200) + '...' : data,
+                  dataLength: data.length,
+                });
+              }
             }
           }
         }

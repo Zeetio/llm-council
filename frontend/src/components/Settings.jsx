@@ -696,6 +696,29 @@ export default function Settings({ onClose }) {
               </div>
             )}
           </section>
+
+          {/* ツールセクション */}
+          <section className="settings-section">
+            <h3>Tools</h3>
+            <p className="section-description">
+              Council メンバーが使用できるツールを設定します
+            </p>
+
+            <div className="tools-card">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={config.tools_enabled || false}
+                  onChange={(e) => setConfig({ ...config, tools_enabled: e.target.checked })}
+                />
+                Web検索を有効化
+              </label>
+              <p className="tools-hint">
+                有効にすると、Council メンバーがインターネット検索を行い、最新情報を取得できます。
+                バックエンドに TAVILY_API_KEY の設定が必要です（月1000回無料）。
+              </p>
+            </div>
+          </section>
         </div>
 
         <div className="settings-footer">

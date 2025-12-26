@@ -353,7 +353,19 @@ function App() {
             break;
 
           case 'complete':
-            // Stream complete, reload conversations list
+            // Stream complete - 使用量データを保存
+            if (event.usage) {
+              setCurrentConversation((prev) => {
+                const messages = [...prev.messages];
+                const lastIdx = messages.length - 1;
+                messages[lastIdx] = {
+                  ...messages[lastIdx],
+                  usage: event.usage,
+                };
+                return { ...prev, messages };
+              });
+            }
+            // Reload conversations list
             loadConversations();
             setIsLoading(false);
             abortControllerRef.current = null;

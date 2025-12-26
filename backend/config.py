@@ -13,6 +13,9 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 # OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Tavily API Key (for web search tool)
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
 # Default council configuration
 # モデルID: OpenRouter形式 (https://openrouter.ai/models)
 DEFAULT_CONFIG = {
@@ -47,7 +50,9 @@ DEFAULT_CONFIG = {
         "name": "Chairman",
         "model": "openai/gpt-5.1",
         "system_prompt": None
-    }
+    },
+    # ツール設定
+    "tools_enabled": False,  # Web検索などのツールを有効化するか
 }
 
 
@@ -66,6 +71,9 @@ def get_config(project_id: str = "default") -> Dict[str, Any]:
     # memory_settingsを復元
     if stored.get("memory_settings"):
         result["memory_settings"] = stored["memory_settings"]
+    # tools_enabledを復元
+    if "tools_enabled" in stored:
+        result["tools_enabled"] = stored["tools_enabled"]
     return result
 
 

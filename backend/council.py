@@ -2,9 +2,11 @@
 
 import logging
 from typing import List, Dict, Any, Tuple, Optional
-from .openrouter import query_members_parallel, query_model
+from .openrouter import query_members_parallel, query_model, query_model_with_tools
 from .config import get_council_members, get_chairman, get_config
 from .memory_extractor import build_memory_context
+from .llm_logger import LLMLogger
+from .tools import AVAILABLE_TOOLS, ToolLogger
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,9 @@ async def stage1_collect_responses(
     conversation_history: List[Dict[str, Any]] = None,
     user_comments: List[Dict[str, Any]] = None,
     project_id: str = "default",
-    session_metadata: Optional[Dict[str, Any]] = None
+    session_metadata: Optional[Dict[str, Any]] = None,
+    llm_logger: Optional[LLMLogger] = None,
+    tool_logger: Optional[ToolLogger] = None
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council members.
@@ -100,8 +104,21 @@ async def stage1_collect_responses(
     members = get_council_members(project_id)
     logger.info(f"Stage 1: Querying {len(members)} models")
 
-    # Query all members in parallel
-    responses = await query_members_parallel(members, messages)
+    # ツール設定を取得
+    config = get_config(project_id)
+    tools_enabled = config.get("tools_enabled", False)
+    tools = AVAILABLE_TOOLS if tools_enabled else None
+
+    if tools_enabled:
+        logger.info("Stage 1: Tools enabled (web_search)")
+
+    # Query all members in parallel (ツール有効時はツール付きで)
+    responses = await query_members_parallel(
+        members,
+        messages,
+        tools=tools,
+        tool_logger=tool_logger
+    )
 
     # Format results - create a lookup for member info
     member_lookup = {m["id"]: m for m in members}
@@ -110,11 +127,25 @@ async def stage1_collect_responses(
     for member_id, response in responses.items():
         if response is not None:  # Only include successful responses
             member = member_lookup.get(member_id, {})
+
+            # LLM呼び出しをログに記録
+            if llm_logger and response.get('usage'):
+                llm_logger.log_call(
+                    model=member.get("model", "unknown"),
+                    stage="stage1",
+                    member_id=member_id,
+                    usage=response['usage'],
+                    response_time_ms=response.get('response_time_ms', 0),
+                    tool_used=response.get('tool_used', False)
+                )
+
             stage1_results.append({
                 "id": member_id,
                 "name": member.get("name", member_id),
                 "model": member.get("model", "unknown"),
-                "response": response.get('content', '')
+                "response": response.get('content', ''),
+                "tool_used": response.get('tool_used', False),
+                "tools_used": response.get('tools_used', [])
             })
         else:
             logger.warning(f"Stage 1: Model {member_id} failed to respond")
@@ -126,7 +157,8 @@ async def stage1_collect_responses(
 async def stage2_collect_rankings(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    project_id: str = "default"
+    project_id: str = "default",
+    llm_logger: Optional[LLMLogger] = None
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each member ranks the anonymized responses.
@@ -202,6 +234,17 @@ Now provide your evaluation and ranking:"""
             member = member_lookup.get(member_id, {})
             full_text = response.get('content', '')
             parsed = parse_ranking_from_text(full_text)
+
+            # LLM呼び出しをログに記録
+            if llm_logger and response.get('usage'):
+                llm_logger.log_call(
+                    model=member.get("model", "unknown"),
+                    stage="stage2",
+                    member_id=member_id,
+                    usage=response['usage'],
+                    response_time_ms=response.get('response_time_ms', 0)
+                )
+
             stage2_results.append({
                 "id": member_id,
                 "name": member.get("name", member_id),
@@ -220,7 +263,8 @@ async def stage3_synthesize_final(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
     stage2_results: List[Dict[str, Any]],
-    project_id: str = "default"
+    project_id: str = "default",
+    llm_logger: Optional[LLMLogger] = None
 ) -> Dict[str, Any]:
     """
     Stage 3: Chairman synthesizes final response.
@@ -283,6 +327,16 @@ Provide a clear, well-reasoned final answer that represents the council's collec
             "model": chairman["model"],
             "response": "Error: Unable to generate final synthesis."
         }
+
+    # LLM呼び出しをログに記録
+    if llm_logger and response.get('usage'):
+        llm_logger.log_call(
+            model=chairman["model"],
+            stage="stage3",
+            member_id=chairman["id"],
+            usage=response['usage'],
+            response_time_ms=response.get('response_time_ms', 0)
+        )
 
     logger.info("Stage 3: Chairman synthesis complete")
     return {
@@ -432,9 +486,19 @@ async def run_full_council(
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
+    # LLMロガーとツールロガーを初期化
+    llm_logger = LLMLogger()
+    tool_logger = ToolLogger()
+
     # Stage 1: Collect individual responses
     stage1_results = await stage1_collect_responses(
-        user_query, conversation_history, user_comments, project_id, session_metadata
+        user_query,
+        conversation_history,
+        user_comments,
+        project_id,
+        session_metadata,
+        llm_logger=llm_logger,
+        tool_logger=tool_logger
     )
 
     # If no members responded successfully, return error
@@ -444,10 +508,15 @@ async def run_full_council(
             "name": "Error",
             "model": "error",
             "response": "All models failed to respond. Please try again."
-        }, {}
+        }, {"llm_usage": llm_logger.get_summary()}
 
     # Stage 2: Collect rankings
-    stage2_results, label_to_id = await stage2_collect_rankings(user_query, stage1_results, project_id)
+    stage2_results, label_to_id = await stage2_collect_rankings(
+        user_query,
+        stage1_results,
+        project_id,
+        llm_logger=llm_logger
+    )
 
     # Calculate aggregate rankings
     aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
@@ -457,13 +526,19 @@ async def run_full_council(
         user_query,
         stage1_results,
         stage2_results,
-        project_id
+        project_id,
+        llm_logger=llm_logger
     )
 
-    # Prepare metadata
+    # ツールログをLLMロガーに追加
+    llm_logger.add_tool_logs(tool_logger.get_logs())
+
+    # Prepare metadata（使用量情報を含む）
     metadata = {
         "label_to_id": label_to_id,
-        "aggregate_rankings": aggregate_rankings
+        "aggregate_rankings": aggregate_rankings,
+        "llm_usage": llm_logger.get_summary(),
+        "llm_logs": llm_logger.to_json()
     }
 
     return stage1_results, stage2_results, stage3_result, metadata

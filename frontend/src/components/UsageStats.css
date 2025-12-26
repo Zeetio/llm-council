@@ -1,0 +1,173 @@
+.usage-stats {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.usage-stats__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.usage-stats__icon {
+  font-size: 16px;
+}
+
+.usage-stats__title {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.usage-stats__toggle {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.usage-stats__summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.usage-stats__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.usage-stats__label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.usage-stats__value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.usage-stats__tools-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.usage-stats__tools-icon {
+  font-size: 14px;
+}
+
+.usage-stats__details {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.usage-stats__section {
+  margin-bottom: 16px;
+}
+
+.usage-stats__section:last-child {
+  margin-bottom: 0;
+}
+
+.usage-stats__section-title {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.usage-stats__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.usage-stats__table th,
+.usage-stats__table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.usage-stats__table th {
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+}
+
+.usage-stats__table td {
+  color: var(--text-primary);
+}
+
+.usage-stats__model-name {
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.usage-stats__tool-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.usage-stats__tool-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.usage-stats__tool-item:last-child {
+  margin-bottom: 0;
+}
+
+.usage-stats__tool-name {
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.usage-stats__tool-args {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.usage-stats__tool-result {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.usage-stats__tool-error {
+  background: var(--accent-red);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+}

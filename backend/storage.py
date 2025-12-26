@@ -313,7 +313,12 @@ class GCSStorage:
         blob.upload_from_string(json.dumps(config, ensure_ascii=False, indent=2), content_type="application/json")
 
     def list_projects(self) -> List[str]:
-        prefix = self._path("", "projects", "")
+        # プロジェクト一覧用の正しいprefixを構築
+        # _path()を使うと誤ったパスになるため直接構築
+        if self.prefix:
+            prefix = f"{self.prefix}/projects/"
+        else:
+            prefix = "projects/"
         blobs = self.client.list_blobs(self.bucket, prefix=prefix)
         projects = set()
         for blob in blobs:

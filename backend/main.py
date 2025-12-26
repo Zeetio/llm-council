@@ -24,6 +24,8 @@ from . import storage
 from .config import get_config, save_config
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
 from .memory_extractor import extract_memory_from_conversation, generate_conversation_summary
+from .llm_logger import LLMLogger
+from .tools import ToolLogger
 
 app = FastAPI(title="LLM Council API")
 
@@ -220,6 +222,10 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
         try:
             logger.info(f"[{conversation_id[:8]}] Starting council process")
 
+            # LLMロガーとツールロガーを初期化
+            llm_logger = LLMLogger()
+            tool_logger = ToolLogger()
+
             # Add user message
             storage.add_user_message(conversation_id, request.content, project_id)
 
@@ -236,7 +242,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
                 conversation_history,
                 request.user_comments,
                 project_id,
-                request.session_metadata
+                request.session_metadata,
+                llm_logger=llm_logger,
+                tool_logger=tool_logger
             )
             logger.info(f"[{conversation_id[:8]}] Stage 1: Complete ({len(stage1_results)} responses)")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
@@ -244,7 +252,12 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
             # Stage 2: Collect rankings
             logger.info(f"[{conversation_id[:8]}] Stage 2: Starting")
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_id = await stage2_collect_rankings(request.content, stage1_results, project_id)
+            stage2_results, label_to_id = await stage2_collect_rankings(
+                request.content,
+                stage1_results,
+                project_id,
+                llm_logger=llm_logger
+            )
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
             logger.info(f"[{conversation_id[:8]}] Stage 2: Complete ({len(stage2_results)} rankings)")
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_id': label_to_id, 'aggregate_rankings': aggregate_rankings}})}\n\n"
@@ -252,7 +265,13 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
             # Stage 3: Synthesize final answer
             logger.info(f"[{conversation_id[:8]}] Stage 3: Starting")
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results, project_id)
+            stage3_result = await stage3_synthesize_final(
+                request.content,
+                stage1_results,
+                stage2_results,
+                project_id,
+                llm_logger=llm_logger
+            )
             logger.info(f"[{conversation_id[:8]}] Stage 3: Complete")
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
@@ -281,9 +300,19 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
                 )
             )
 
-            # Send completion event
+            # ツールログをLLMロガーに統合
+            llm_logger.add_tool_logs(tool_logger.get_logs())
+
+            # 使用量サマリーを取得
+            usage_summary = llm_logger.get_summary()
+            logger.info(
+                f"[{conversation_id[:8]}] Usage: {usage_summary.get('total_tokens', 0)} tokens, "
+                f"${usage_summary.get('total_cost_usd', 0):.6f}"
+            )
+
+            # Send completion event（使用量情報付き）
             logger.info(f"[{conversation_id[:8]}] Council process complete")
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'usage': usage_summary})}\n\n"
 
         except Exception as e:
             logger.error(f"[{conversation_id[:8]}] Error: {e}")

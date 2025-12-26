@@ -30,9 +30,13 @@ help: ## このヘルプを表示
 	@echo "  2. make dev          - バックエンド＋フロントエンド同時起動"
 	@echo ""
 	@echo "デプロイフロー（初回）:"
-	@echo "  1. make secret-create   - Secret Managerにキーを登録"
-	@echo "  2. make deploy          - Cloud Runにデプロイ"
-	@echo "  3. make iam-setup       - 権限設定（必要な場合）"
+	@echo "  1. make ar-setup        - Artifact Registryをセットアップ"
+	@echo "  2. make secret-create   - Secret Managerにキーを登録"
+	@echo "  3. make deploy          - Cloud Runにデプロイ（--image方式）"
+	@echo "  4. make iam-setup       - 権限設定（必要な場合）"
+	@echo ""
+	@echo "GCSバケット移行後:"
+	@echo "  make gcs-delete-bucket  - 不要になったGCSバケットを削除"
 	@echo ""
 
 # ------------------------------------------------------------------------------
@@ -98,8 +102,13 @@ build-check: build ## ビルド後に成果物を確認
 	@ls -la frontend/dist/
 
 # ------------------------------------------------------------------------------
-# Docker
+# Docker & Artifact Registry
 # ------------------------------------------------------------------------------
+AR_REGION := asia-northeast1
+AR_REPO := llm-council
+# 遅延評価（=）でGCP_PROJECTが後で定義されても正しく展開される
+AR_IMAGE = $(AR_REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(AR_REPO)/app
+
 docker-build: ## Dockerイメージをビルド
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
@@ -118,6 +127,22 @@ docker-logs: ## Dockerコンテナのログを表示
 
 docker-shell: ## Dockerコンテナにシェルで接続
 	docker exec -it $(DOCKER_IMAGE) /bin/bash
+
+docker-push: ## Artifact RegistryにDockerイメージをpush
+	@echo "=== Artifact Registryにイメージをpush ==="
+	docker build -t $(AR_IMAGE):$(DOCKER_TAG) .
+	docker push $(AR_IMAGE):$(DOCKER_TAG)
+	@echo "✓ プッシュ完了: $(AR_IMAGE):$(DOCKER_TAG)"
+
+ar-setup: ## Artifact Registryのリポジトリを作成（初回のみ）
+	@echo "Artifact Registryリポジトリを作成..."
+	gcloud artifacts repositories create $(AR_REPO) \
+		--repository-format=docker \
+		--location=$(AR_REGION) \
+		--description="LLM Council Docker images" || echo "既に存在します"
+	@echo "Docker認証を設定..."
+	gcloud auth configure-docker $(AR_REGION)-docker.pkg.dev --quiet
+	@echo "✓ セットアップ完了"
 
 # ------------------------------------------------------------------------------
 # クリーンアップ
@@ -154,7 +179,8 @@ data-reset: ## ローカルデータをリセット（注意: データが消え
 GCP_PROJECT := $(shell gcloud config get-value project 2>/dev/null)
 GCP_REGION := asia-northeast1
 CLOUD_RUN_SERVICE := llm-council
-SECRET_NAME := openrouter-api-key
+SECRET_OPENROUTER := openrouter-api-key
+SECRET_TAVILY := tavily-api-key
 
 # シークレット管理
 secret-create: ## Secret Managerにシークレットを作成
@@ -177,14 +203,15 @@ secret-delete: ## シークレットを削除（注意）
 		gcloud secrets delete $(SECRET_NAME) --quiet || echo "キャンセルしました"
 
 # Cloud Run デプロイ
-deploy: ## Cloud Runにデプロイ（Secret Manager使用・IAM認証）
+deploy: docker-push ## Cloud Runにデプロイ（--image方式・GCSバケット不要）
 	@echo "=== GCP Cloud Run デプロイ ==="
 	@echo "プロジェクト: $(GCP_PROJECT)"
 	@echo "リージョン: $(GCP_REGION)"
 	@echo "サービス: $(CLOUD_RUN_SERVICE)"
+	@echo "イメージ: $(AR_IMAGE):$(DOCKER_TAG)"
 	@echo ""
 	gcloud run deploy $(CLOUD_RUN_SERVICE) \
-		--source . \
+		--image $(AR_IMAGE):$(DOCKER_TAG) \
 		--region $(GCP_REGION) \
 		--platform managed \
 		--no-allow-unauthenticated \
@@ -194,13 +221,13 @@ deploy: ## Cloud Runにデプロイ（Secret Manager使用・IAM認証）
 		--min-instances 0 \
 		--max-instances 10
 	@echo ""
-	@echo "✓ IAM認証が有効です"
+	@echo "✓ デプロイ完了（IAM認証有効）"
 	@echo "アクセスするには: gcloud run services proxy $(CLOUD_RUN_SERVICE) --region $(GCP_REGION)"
 
-deploy-with-gcs: ## Cloud Runにデプロイ（GCSバケット指定・IAM認証）
+deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定・IAM認証）
 	@read -p "GCSバケット名を入力: " bucket && \
 	gcloud run deploy $(CLOUD_RUN_SERVICE) \
-		--source . \
+		--image $(AR_IMAGE):$(DOCKER_TAG) \
 		--region $(GCP_REGION) \
 		--platform managed \
 		--no-allow-unauthenticated \
@@ -229,6 +256,26 @@ iam-setup: ## Secret Managerへのアクセス権限を設定
 		--member="serviceAccount:$$SA" \
 		--role="roles/secretmanager.secretAccessor"
 	@echo "✓ 権限が付与されました"
+
+gcs-cleanup: ## ソースデプロイ用GCSバケットの古いファイルを削除
+	@echo "=== GCSバケットのクリーンアップ ==="
+	@BUCKET="run-sources-$(GCP_PROJECT)-$(GCP_REGION)"; \
+	echo "バケット: gs://$$BUCKET"; \
+	FILES=$$(gsutil ls "gs://$$BUCKET/services/$(CLOUD_RUN_SERVICE)/" 2>/dev/null | head -n -1); \
+	if [ -n "$$FILES" ]; then \
+		echo "削除対象（最新1つを除く）:"; \
+		echo "$$FILES"; \
+		echo "$$FILES" | xargs -I {} gsutil rm {}; \
+		echo "✓ クリーンアップ完了"; \
+	else \
+		echo "削除対象なし"; \
+	fi
+
+gcs-delete-bucket: ## ソースデプロイ用GCSバケットを完全削除（--image移行後）
+	@echo "=== GCSバケットを削除 ==="
+	@BUCKET="run-sources-$(GCP_PROJECT)-$(GCP_REGION)"; \
+	read -p "gs://$$BUCKET を削除しますか？ [y/N] " confirm && [ "$$confirm" = "y" ] && \
+		gsutil -m rm -r "gs://$$BUCKET" && echo "✓ 削除完了" || echo "キャンセルしました"
 
 # ------------------------------------------------------------------------------
 # ユーティリティ

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import UsageStats from './UsageStats';
 import TextSelectionCommentPopup from './TextSelectionCommentPopup';
 import { useTextSelection } from '../hooks/useTextSelection';
 import './ChatInterface.css';
@@ -173,6 +174,9 @@ export default function ChatInterface({
                     </div>
                   )}
                   {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
+
+                  {/* Usage Stats - Stage3完了後に表示 */}
+                  {msg.usage && <UsageStats usage={msg.usage} />}
                 </div>
               )}
             </div>
