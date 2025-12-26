@@ -14,29 +14,30 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Default council configuration
+# モデルID: OpenRouter形式 (https://openrouter.ai/models)
 DEFAULT_CONFIG = {
     "council_members": [
         {
-            "id": "gpt",
+            "id": "gpt51",
             "name": "GPT-5.1",
             "model": "openai/gpt-5.1",
             "system_prompt": None
         },
         {
-            "id": "gemini",
-            "name": "Gemini 3 Pro",
-            "model": "google/gemini-3-pro-preview",
+            "id": "gpt5mini",
+            "name": "GPT-5 Mini",
+            "model": "openai/gpt-5-mini",
             "system_prompt": None
         },
         {
-            "id": "claude",
-            "name": "Claude Opus 4.5",
-            "model": "anthropic/claude-opus-4.5",
+            "id": "gemini",
+            "name": "Gemini 3 Flash",
+            "model": "google/gemini-3-flash-preview",
             "system_prompt": None
         },
         {
             "id": "grok",
-            "name": "Grok 4.1",
+            "name": "Grok 4.1 Fast",
             "model": "x-ai/grok-4.1-fast",
             "system_prompt": None
         },
@@ -59,6 +60,12 @@ def get_config(project_id: str = "default") -> Dict[str, Any]:
         result["council_members"] = stored["council_members"]
     if stored.get("chairman"):
         result["chairman"] = stored["chairman"]
+    # password_hashはデフォルトにないので明示的にコピー
+    if "password_hash" in stored:
+        result["password_hash"] = stored["password_hash"]
+    # memory_settingsを復元
+    if stored.get("memory_settings"):
+        result["memory_settings"] = stored["memory_settings"]
     return result
 
 

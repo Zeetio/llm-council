@@ -4,17 +4,29 @@ import remarkGfm from 'remark-gfm';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import TextSelectionCommentPopup from './TextSelectionCommentPopup';
+import { useTextSelection } from '../hooks/useTextSelection';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
+  onAddComment,
+  onStopGeneration,
+  pendingComments = [],
 }) {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+
+  // テキスト選択検知
+  const { selectedText, anchorRect, clearSelection } = useTextSelection(messagesContainerRef);
+
+  // 選択中のコンテキスト情報
+  const [selectionContext, setSelectionContext] = useState(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,6 +85,24 @@ export default function ChatInterface({
     }
   };
 
+  // コメント送信ハンドラー
+  const handleCommentSubmit = (comment) => {
+    if (onAddComment && selectedText) {
+      onAddComment({
+        selectedText,
+        comment,
+        // メッセージインデックスなどのコンテキスト情報は選択時に取得する必要があるが
+        // 簡略化のため、選択テキストのみを使用
+      });
+    }
+    clearSelection();
+  };
+
+  // コメントキャンセルハンドラー
+  const handleCommentCancel = () => {
+    clearSelection();
+  };
+
   if (!conversation) {
     return (
       <div className="chat-interface">
@@ -86,7 +116,7 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>
@@ -156,8 +186,39 @@ export default function ChatInterface({
           </div>
         )}
 
+        {/* テキスト選択時のコメントポップアップ */}
+        {selectedText && anchorRect && (
+          <TextSelectionCommentPopup
+            anchorRect={anchorRect}
+            selectedText={selectedText}
+            onSubmit={handleCommentSubmit}
+            onCancel={handleCommentCancel}
+          />
+        )}
+
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 保留中のコメント表示 */}
+      {pendingComments.length > 0 && (
+        <div className="pending-comments">
+          <div className="pending-comments__header">
+            <span className="pending-comments__icon">💬</span>
+            <span className="pending-comments__title">
+              {pendingComments.length}件のフィードバックが次の送信に含まれます
+            </span>
+          </div>
+          <div className="pending-comments__list">
+            {pendingComments.map((c) => (
+              <div key={c.id} className="pending-comment">
+                <span className="pending-comment__text">「{c.selectedText.substring(0, 30)}...」</span>
+                <span className="pending-comment__arrow">→</span>
+                <span className="pending-comment__feedback">{c.comment.substring(0, 50)}{c.comment.length > 50 ? '...' : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form className="input-form" onSubmit={handleSubmit}>
         <div className="input-wrapper">
@@ -205,13 +266,23 @@ export default function ChatInterface({
           >
             📎
           </button>
-          <button
-            type="submit"
-            className="send-button"
-            disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
-          >
-            Send
-          </button>
+          {isLoading ? (
+            <button
+              type="button"
+              className="stop-button"
+              onClick={onStopGeneration}
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="send-button"
+              disabled={!input.trim() && attachedFiles.length === 0}
+            >
+              Send
+            </button>
+          )}
         </div>
       </form>
     </div>

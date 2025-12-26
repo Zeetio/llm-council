@@ -17,7 +17,7 @@ export default function Sidebar({
     <div className="sidebar">
       <div className="sidebar-header">
         <div className="header-top">
-          <h1>LLM Council</h1>
+          <h1>James Council</h1>
           <button className="settings-btn" onClick={onOpenSettings} title="Settings">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="3"/>

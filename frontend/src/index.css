@@ -7,6 +7,77 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* ライトモード（デフォルト） */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #fafafa;
+  --bg-sidebar: #f8f8f8;
+  --bg-hover: #f0f0f0;
+  --bg-input: #ffffff;
+  --bg-code: #f5f5f5;
+  --bg-user-message: #f0f7ff;
+  --bg-stage3: #f0fff0;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --text-muted: #888888;
+
+  --border-color: #e0e0e0;
+  --border-light: #d0d0d0;
+  --border-input: #ddd;
+
+  --accent-blue: #4a90e2;
+  --accent-blue-hover: #357abd;
+  --accent-blue-light: #e3f2fd;
+  --accent-blue-border: #d0e7ff;
+  --accent-green: #2d8a2d;
+  --accent-green-light: #c8e6c8;
+  --accent-red: #e57373;
+  --accent-red-hover: #d32f2f;
+  --accent-yellow: #ffc107;
+  --accent-yellow-light: #fffde7;
+
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --shadow-popup: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #333333;
+  --bg-sidebar: #252525;
+  --bg-hover: #3a3a3a;
+  --bg-input: #2a2a2a;
+  --bg-code: #2a2a2a;
+  --bg-user-message: #1e3a5f;
+  --bg-stage3: #1a3a1a;
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  --text-primary: #e4e4e4;
+  --text-secondary: #a8a8a8;
+  --text-tertiary: #707070;
+  --text-muted: #888888;
+
+  --border-color: #3a3a3a;
+  --border-light: #4a4a4a;
+  --border-input: #4a4a4a;
+
+  --accent-blue: #5a9eff;
+  --accent-blue-hover: #4a8ad9;
+  --accent-blue-light: #1e3a5f;
+  --accent-blue-border: #2a4a6f;
+  --accent-green: #4db84d;
+  --accent-green-light: #1a3a1a;
+  --accent-red: #ff6b6b;
+  --accent-red-hover: #ff4444;
+  --accent-yellow: #ffca28;
+  --accent-yellow-light: #3a3520;
+
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-popup: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -19,7 +90,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 #root {
@@ -70,7 +142,7 @@ body {
 }
 
 .markdown-content pre {
-  background: #f5f5f5;
+  background: var(--bg-code);
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
@@ -78,7 +150,7 @@ body {
 }
 
 .markdown-content code {
-  background: #f5f5f5;
+  background: var(--bg-code);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: monospace;
@@ -93,8 +165,8 @@ body {
 .markdown-content blockquote {
   margin: 0 0 12px 0;
   padding-left: 16px;
-  border-left: 4px solid #ddd;
-  color: #666;
+  border-left: 4px solid var(--border-input);
+  color: var(--text-secondary);
 }
 
 .markdown-content table {
@@ -105,16 +177,16 @@ body {
 
 .markdown-content th,
 .markdown-content td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-input);
   padding: 8px;
   text-align: left;
 }
 
 .markdown-content th {
-  background: #fafafa;
+  background: var(--bg-tertiary);
   font-weight: 600;
 }
 
 .markdown-content tr:nth-child(even) {
-  background: #fcfcfc;
+  background: var(--bg-tertiary);
 }

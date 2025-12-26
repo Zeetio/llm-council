@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
+import PasswordDialog from './components/PasswordDialog';
 import { api, setProjectId as apiSetProjectId, getProjectId as apiGetProjectId } from './api';
 import './App.css';
 
@@ -14,11 +15,45 @@ function App() {
   const [projectId, setProjectId] = useState(apiGetProjectId());
   const [projects, setProjects] = useState([]);
 
-  // Load conversations on mount
+  // パスワードダイアログ関連の状態
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [pendingProjectId, setPendingProjectId] = useState(null);
+  const [isAuthRequired, setIsAuthRequired] = useState(false); // 初回認証待ち状態
+
+  // ユーザーコメント（フィードバック）状態
+  // 構造: [{ id, selectedText, comment, createdAt }]
+  const [userComments, setUserComments] = useState([]);
+
+  // 生成中断用のAbortController
+  const abortControllerRef = useRef(null);
+
+  // Load conversations on mount（パスワード確認付き）
   useEffect(() => {
-    apiSetProjectId(projectId);
-    loadConversations();
-    loadProjects();
+    const initializeProject = async () => {
+      apiSetProjectId(projectId);
+
+      // パスワード保護状態を確認
+      try {
+        const authStatus = await api.getProjectAuthStatus(projectId);
+        if (authStatus.has_password) {
+          // パスワードダイアログを表示（初回認証）
+          setPendingProjectId(projectId);
+          setIsAuthRequired(true);
+          setShowPasswordDialog(true);
+          return; // 認証完了まで待機
+        }
+      } catch (error) {
+        // エラー時（新規プロジェクト等）は認証不要として続行
+        console.error('Failed to check auth status:', error);
+      }
+
+      // パスワードなし - 通常読み込み
+      setIsAuthRequired(false);
+      loadConversations();
+      loadProjects();
+    };
+
+    initializeProject();
   }, [projectId]);
 
   const loadProjects = async () => {
@@ -72,11 +107,75 @@ function App() {
     setCurrentConversationId(id);
   };
 
-  const handleProjectChange = (id) => {
-    const next = id?.trim() || 'default';
-    setProjectId(next);
+  // プロジェクト切り替え完了処理
+  const completeProjectChange = (id) => {
+    setProjectId(id);
     setCurrentConversationId(null);
     setCurrentConversation(null);
+    setShowPasswordDialog(false);
+    setPendingProjectId(null);
+  };
+
+  // パスワード認証成功時の処理
+  const handlePasswordSuccess = () => {
+    if (pendingProjectId) {
+      if (isAuthRequired && pendingProjectId === projectId) {
+        // 初回認証成功 - 現在のプロジェクトでデータ読み込み
+        setShowPasswordDialog(false);
+        setPendingProjectId(null);
+        setIsAuthRequired(false);
+        loadConversations();
+        loadProjects();
+      } else {
+        // プロジェクト切り替え時の認証成功
+        completeProjectChange(pendingProjectId);
+      }
+    }
+  };
+
+  // パスワードダイアログキャンセル時の処理
+  const handlePasswordCancel = () => {
+    if (isAuthRequired) {
+      // 初回認証キャンセル - defaultプロジェクトに切り替え
+      setShowPasswordDialog(false);
+      setPendingProjectId(null);
+      setIsAuthRequired(false);
+      if (projectId !== 'default') {
+        setProjectId('default');
+      } else {
+        // defaultプロジェクトの場合は直接読み込み
+        loadConversations();
+        loadProjects();
+      }
+    } else {
+      // プロジェクト切り替えキャンセル - 何もしない
+      setShowPasswordDialog(false);
+      setPendingProjectId(null);
+    }
+  };
+
+  const handleProjectChange = async (id) => {
+    const next = id?.trim() || 'default';
+
+    // 現在のプロジェクトと同じなら何もしない
+    if (next === projectId) return;
+
+    try {
+      // パスワード状態を確認
+      const authStatus = await api.getProjectAuthStatus(next);
+      if (authStatus.has_password) {
+        // パスワードダイアログを表示
+        setPendingProjectId(next);
+        setShowPasswordDialog(true);
+      } else {
+        // パスワードなし - 直接切り替え
+        completeProjectChange(next);
+      }
+    } catch (error) {
+      console.error('Failed to check auth status:', error);
+      // エラー時も切り替えを試みる（新規プロジェクトの場合など）
+      completeProjectChange(next);
+    }
   };
 
   const handleDeleteProject = async () => {
@@ -107,8 +206,31 @@ function App() {
     }
   };
 
+  // コメント追加ハンドラー
+  const handleAddComment = ({ selectedText, comment }) => {
+    const newComment = {
+      id: `comment-${Date.now()}`,
+      selectedText,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+    setUserComments((prev) => [...prev, newComment]);
+    console.log('Comment added:', newComment);
+  };
+
+  // 生成を停止する
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
   const handleSendMessage = async (content) => {
     if (!currentConversationId) return;
+
+    // AbortControllerを作成
+    abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
     try {
@@ -139,14 +261,24 @@ function App() {
         messages: [...prev.messages, assistantMessage],
       }));
 
-      // Send message with streaming
-      await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
+      // Send message with streaming（ユーザーコメントを含む）
+      const commentsToSend = [...userComments];
+      setUserComments([]); // コメントをクリア
+
+      await api.sendMessageStream(
+        currentConversationId,
+        content,
+        commentsToSend,
+        (eventType, event) => {
         switch (eventType) {
           case 'stage1_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage1 = true;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                loading: { ...messages[lastIdx].loading, stage1: true },
+              };
               return { ...prev, messages };
             });
             break;
@@ -154,9 +286,12 @@ function App() {
           case 'stage1_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage1 = event.data;
-              lastMsg.loading.stage1 = false;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                stage1: event.data,
+                loading: { ...messages[lastIdx].loading, stage1: false },
+              };
               return { ...prev, messages };
             });
             break;
@@ -164,8 +299,11 @@ function App() {
           case 'stage2_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage2 = true;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                loading: { ...messages[lastIdx].loading, stage2: true },
+              };
               return { ...prev, messages };
             });
             break;
@@ -173,10 +311,13 @@ function App() {
           case 'stage2_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage2 = event.data;
-              lastMsg.metadata = event.metadata;
-              lastMsg.loading.stage2 = false;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                stage2: event.data,
+                metadata: event.metadata,
+                loading: { ...messages[lastIdx].loading, stage2: false },
+              };
               return { ...prev, messages };
             });
             break;
@@ -184,8 +325,11 @@ function App() {
           case 'stage3_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage3 = true;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                loading: { ...messages[lastIdx].loading, stage3: true },
+              };
               return { ...prev, messages };
             });
             break;
@@ -193,9 +337,12 @@ function App() {
           case 'stage3_complete':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage3 = event.data;
-              lastMsg.loading.stage3 = false;
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                stage3: event.data,
+                loading: { ...messages[lastIdx].loading, stage3: false },
+              };
               return { ...prev, messages };
             });
             break;
@@ -209,18 +356,36 @@ function App() {
             // Stream complete, reload conversations list
             loadConversations();
             setIsLoading(false);
+            abortControllerRef.current = null;
+            break;
+
+          case 'aborted':
+            // ユーザーによる中断
+            console.log('Generation stopped by user');
+            setIsLoading(false);
+            abortControllerRef.current = null;
             break;
 
           case 'error':
             console.error('Stream error:', event.message);
             setIsLoading(false);
+            abortControllerRef.current = null;
             break;
 
           default:
             console.log('Unknown event type:', eventType);
         }
-      });
+      },
+        abortControllerRef.current?.signal
+      );
     } catch (error) {
+      // AbortErrorはユーザーによる中断なのでエラー扱いしない
+      if (error.name === 'AbortError') {
+        console.log('Request aborted by user');
+        setIsLoading(false);
+        abortControllerRef.current = null;
+        return;
+      }
       console.error('Failed to send message:', error);
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
@@ -228,6 +393,7 @@ function App() {
         messages: prev.messages.slice(0, -2),
       }));
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -250,8 +416,19 @@ function App() {
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
+        onAddComment={handleAddComment}
+        onStopGeneration={handleStopGeneration}
+        pendingComments={userComments}
       />
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showPasswordDialog && pendingProjectId && (
+        <PasswordDialog
+          projectId={pendingProjectId}
+          mode="verify"
+          onSuccess={handlePasswordSuccess}
+          onCancel={handlePasswordCancel}
+        />
+      )}
     </div>
   );
 }

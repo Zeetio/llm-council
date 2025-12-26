@@ -1,7 +1,7 @@
 .sidebar {
   width: 260px;
-  background: #f8f8f8;
-  border-right: 1px solid #e0e0e0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -9,7 +9,7 @@
 
 .sidebar-header {
   padding: 16px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .project-selector {
@@ -21,14 +21,16 @@
 
 .project-selector label {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .project-selector input {
   padding: 8px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   font-size: 13px;
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .project-row {
@@ -40,28 +42,30 @@
 .project-row select {
   flex: 1;
   padding: 8px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   font-size: 13px;
-  background: #fff;
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .icon-btn {
   padding: 6px 8px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
-  background: #f8f8f8;
+  background: var(--bg-sidebar);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
 }
 
 .icon-btn:hover {
-  background: #eaeaea;
+  background: var(--bg-hover);
 }
 
 .icon-btn.danger {
-  border-color: #e57373;
-  color: #d32f2f;
+  border-color: var(--accent-red);
+  color: var(--accent-red-hover);
 }
 
 .icon-btn.danger:disabled {
@@ -79,13 +83,13 @@
 .sidebar-header h1 {
   font-size: 18px;
   margin: 0;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .settings-btn {
   background: none;
   border: none;
-  color: #666;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -96,15 +100,15 @@
 }
 
 .settings-btn:hover {
-  color: #333;
-  background: #e0e0e0;
+  color: var(--text-primary);
+  background: var(--border-color);
 }
 
 .new-conversation-btn {
   width: 100%;
   padding: 10px;
-  background: #4a90e2;
-  border: 1px solid #4a90e2;
+  background: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
   border-radius: 6px;
   color: #fff;
   cursor: pointer;
@@ -114,8 +118,8 @@
 }
 
 .new-conversation-btn:hover {
-  background: #357abd;
-  border-color: #357abd;
+  background: var(--accent-blue-hover);
+  border-color: var(--accent-blue-hover);
 }
 
 .conversation-list {
@@ -127,7 +131,7 @@
 .no-conversations {
   padding: 16px;
   text-align: center;
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 14px;
 }
 
@@ -140,21 +144,21 @@
 }
 
 .conversation-item:hover {
-  background: #f0f0f0;
+  background: var(--bg-hover);
 }
 
 .conversation-item.active {
-  background: #e8f0fe;
-  border: 1px solid #4a90e2;
+  background: var(--accent-blue-light);
+  border: 1px solid var(--accent-blue);
 }
 
 .conversation-title {
-  color: #333;
+  color: var(--text-primary);
   font-size: 14px;
   margin-bottom: 4px;
 }
 
 .conversation-meta {
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 12px;
 }

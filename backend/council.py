@@ -1,17 +1,52 @@
 """3-stage LLM Council orchestration."""
 
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from .openrouter import query_members_parallel, query_model
-from .config import get_council_members, get_chairman
+from .config import get_council_members, get_chairman, get_config
+from .memory_extractor import build_memory_context
 
 logger = logging.getLogger(__name__)
+
+
+def get_max_history_messages(project_id: str) -> int:
+    """会話履歴の最大メッセージ数を取得"""
+    config = get_config(project_id)
+    memory_settings = config.get("memory_settings", {})
+    return memory_settings.get("max_history_messages", 10)
+
+
+def _build_feedback_context(comments: List[Dict[str, Any]]) -> str:
+    """
+    ユーザーコメント（フィードバック）をLLM向けコンテキストに変換
+
+    Args:
+        comments: コメントのリスト [{ selectedText, comment, ... }]
+
+    Returns:
+        LLMに渡すフィードバック文字列
+    """
+    if not comments:
+        return ""
+
+    lines = ["[User Feedback on Previous Responses]"]
+    lines.append("The user has provided corrections/clarifications on previous responses:")
+    for c in comments:
+        selected = c.get('selectedText', '')[:100]
+        comment = c.get('comment', '')
+        lines.append(f'- Regarding "{selected}...": {comment}')
+    lines.append("[End of Feedback]")
+    lines.append("Please take this feedback into account in your response.")
+    lines.append("")
+    return "\n".join(lines)
 
 
 async def stage1_collect_responses(
     user_query: str,
     conversation_history: List[Dict[str, Any]] = None,
-    project_id: str = "default"
+    user_comments: List[Dict[str, Any]] = None,
+    project_id: str = "default",
+    session_metadata: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council members.
@@ -19,20 +54,44 @@ async def stage1_collect_responses(
     Args:
         user_query: The user's question
         conversation_history: Previous messages in the conversation
+        user_comments: ユーザーからのフィードバック（誤りの訂正など）
+        project_id: プロジェクトID
+        session_metadata: セッションメタデータ（デバイス、OS、タイムゾーン等）
 
     Returns:
         List of dicts with 'id', 'name', 'model' and 'response' keys
     """
     messages = []
 
-    # Add conversation history if available
+    # メモリコンテキストを構築してシステムメッセージとして追加
+    memory_context = build_memory_context(project_id, session_metadata)
+    if memory_context:
+        messages.append({"role": "system", "content": memory_context})
+        logger.info(f"Stage 1: Added memory context ({len(memory_context)} chars)")
+
+    # 会話履歴の最大数を取得
+    max_history = get_max_history_messages(project_id)
+
+    # Add conversation history if available (制限付き)
     if conversation_history:
-        for msg in conversation_history:
+        # 最新のN件のみ使用
+        limited_history = conversation_history[-max_history:] if len(conversation_history) > max_history else conversation_history
+        if len(conversation_history) > max_history:
+            logger.info(f"Stage 1: Limited history from {len(conversation_history)} to {len(limited_history)} messages")
+
+        for msg in limited_history:
             if msg['role'] == 'user':
                 messages.append({"role": "user", "content": msg['content']})
             elif msg['role'] == 'assistant':
                 # Use Stage3 final answer as assistant response
                 messages.append({"role": "assistant", "content": msg['stage3']['response']})
+
+    # ユーザーコメント（フィードバック）をシステムコンテキストとして追加
+    if user_comments and len(user_comments) > 0:
+        feedback_text = _build_feedback_context(user_comments)
+        if feedback_text:
+            logger.info(f"Stage 1: Adding {len(user_comments)} user comments to context")
+            messages.append({"role": "system", "content": feedback_text})
 
     # Add new user query
     messages.append({"role": "user", "content": user_query})
@@ -356,7 +415,9 @@ Title:"""
 async def run_full_council(
     user_query: str,
     conversation_history: List[Dict[str, Any]] = None,
-    project_id: str = "default"
+    user_comments: List[Dict[str, Any]] = None,
+    project_id: str = "default",
+    session_metadata: Optional[Dict[str, Any]] = None
 ) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
@@ -364,12 +425,17 @@ async def run_full_council(
     Args:
         user_query: The user's question
         conversation_history: Previous messages in the conversation
+        user_comments: ユーザーからのフィードバック（誤りの訂正など）
+        project_id: プロジェクトID
+        session_metadata: セッションメタデータ（デバイス、OS、タイムゾーン等）
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query, conversation_history, project_id)
+    stage1_results = await stage1_collect_responses(
+        user_query, conversation_history, user_comments, project_id, session_metadata
+    )
 
     # If no members responded successfully, return error
     if not stage1_results:

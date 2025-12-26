@@ -36,6 +36,12 @@ class LocalStorage:
     def _config_path(self, project_id: str) -> str:
         return os.path.join(self.base_dir, "projects", project_id, "config.json")
 
+    def _memory_path(self, project_id: str) -> str:
+        return os.path.join(self.base_dir, "projects", project_id, "memory.json")
+
+    def _summaries_path(self, project_id: str) -> str:
+        return os.path.join(self.base_dir, "projects", project_id, "summaries.json")
+
     def list_projects(self) -> List[str]:
         Path(self.base_project_dir).mkdir(parents=True, exist_ok=True)
         projects = [d for d in os.listdir(self.base_project_dir) if os.path.isdir(os.path.join(self.base_project_dir, d))]
@@ -115,6 +121,124 @@ class LocalStorage:
         self._ensure_dir(os.path.dirname(path))
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+
+    # ========== メモリ操作 ==========
+
+    def get_memory(self, project_id: str) -> Dict[str, Any]:
+        """ユーザーメモリを取得"""
+        path = self._memory_path(project_id)
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                pass
+        # デフォルトの空メモリ
+        return {
+            "version": 1,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "entries": []
+        }
+
+    def save_memory(self, project_id: str, memory: Dict[str, Any]):
+        """ユーザーメモリを保存"""
+        path = self._memory_path(project_id)
+        self._ensure_dir(os.path.dirname(path))
+        memory["updated_at"] = datetime.utcnow().isoformat()
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(memory, f, indent=2, ensure_ascii=False)
+
+    def add_memory_entry(self, project_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+        """メモリエントリを追加"""
+        memory = self.get_memory(project_id)
+        # IDがなければ生成
+        if "id" not in entry:
+            import uuid
+            entry["id"] = f"mem_{uuid.uuid4().hex[:12]}"
+        if "extracted_at" not in entry:
+            entry["extracted_at"] = datetime.utcnow().isoformat()
+        memory["entries"].append(entry)
+        self.save_memory(project_id, memory)
+        return entry
+
+    def update_memory_entry(self, project_id: str, memory_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """メモリエントリを更新"""
+        memory = self.get_memory(project_id)
+        for entry in memory["entries"]:
+            if entry["id"] == memory_id:
+                entry.update(updates)
+                self.save_memory(project_id, memory)
+                return entry
+        return None
+
+    def delete_memory_entry(self, project_id: str, memory_id: str) -> bool:
+        """メモリエントリを削除"""
+        memory = self.get_memory(project_id)
+        original_len = len(memory["entries"])
+        memory["entries"] = [e for e in memory["entries"] if e["id"] != memory_id]
+        if len(memory["entries"]) < original_len:
+            self.save_memory(project_id, memory)
+            return True
+        return False
+
+    def clear_memory(self, project_id: str):
+        """全メモリを削除"""
+        memory = self.get_memory(project_id)
+        memory["entries"] = []
+        self.save_memory(project_id, memory)
+
+    # ========== サマリー操作 ==========
+
+    def get_summaries(self, project_id: str) -> Dict[str, Any]:
+        """会話サマリー一覧を取得"""
+        path = self._summaries_path(project_id)
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                pass
+        # デフォルトの空サマリー
+        return {
+            "version": 1,
+            "max_entries": 15,
+            "entries": []
+        }
+
+    def save_summaries(self, project_id: str, summaries: Dict[str, Any]):
+        """会話サマリーを保存"""
+        path = self._summaries_path(project_id)
+        self._ensure_dir(os.path.dirname(path))
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(summaries, f, indent=2, ensure_ascii=False)
+
+    def add_summary(self, project_id: str, summary: Dict[str, Any], max_entries: int = 15):
+        """サマリーを追加（max_entries超過時は古いものを削除）"""
+        summaries = self.get_summaries(project_id)
+        if "summarized_at" not in summary:
+            summary["summarized_at"] = datetime.utcnow().isoformat()
+        summaries["entries"].insert(0, summary)  # 新しいものを先頭に
+        # 古いものを削除
+        if len(summaries["entries"]) > max_entries:
+            summaries["entries"] = summaries["entries"][:max_entries]
+        self.save_summaries(project_id, summaries)
+
+    def delete_summary(self, project_id: str, conversation_id: str) -> bool:
+        """特定の会話サマリーを削除"""
+        summaries = self.get_summaries(project_id)
+        original_len = len(summaries["entries"])
+        summaries["entries"] = [s for s in summaries["entries"] if s["conversation_id"] != conversation_id]
+        if len(summaries["entries"]) < original_len:
+            self.save_summaries(project_id, summaries)
+            return True
+        return False
+
+    def clear_summaries(self, project_id: str):
+        """全サマリーを削除"""
+        summaries = self.get_summaries(project_id)
+        summaries["entries"] = []
+        self.save_summaries(project_id, summaries)
 
 
 # -------- GCS backend --------
@@ -215,6 +339,114 @@ class GCSStorage:
         placeholder.upload_from_string("", content_type="text/plain")
         return {"id": project_id, "status": "created"}
 
+    # ========== メモリ操作 ==========
+
+    def get_memory(self, project_id: str) -> Dict[str, Any]:
+        """ユーザーメモリを取得"""
+        blob = self.bucket.blob(self._path(project_id, "", "memory.json"))
+        if blob.exists():
+            try:
+                return json.loads(blob.download_as_text())
+            except Exception:
+                pass
+        return {
+            "version": 1,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "entries": []
+        }
+
+    def save_memory(self, project_id: str, memory: Dict[str, Any]):
+        """ユーザーメモリを保存"""
+        memory["updated_at"] = datetime.utcnow().isoformat()
+        blob = self.bucket.blob(self._path(project_id, "", "memory.json"))
+        blob.upload_from_string(json.dumps(memory, ensure_ascii=False, indent=2), content_type="application/json")
+
+    def add_memory_entry(self, project_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+        """メモリエントリを追加"""
+        memory = self.get_memory(project_id)
+        if "id" not in entry:
+            import uuid
+            entry["id"] = f"mem_{uuid.uuid4().hex[:12]}"
+        if "extracted_at" not in entry:
+            entry["extracted_at"] = datetime.utcnow().isoformat()
+        memory["entries"].append(entry)
+        self.save_memory(project_id, memory)
+        return entry
+
+    def update_memory_entry(self, project_id: str, memory_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """メモリエントリを更新"""
+        memory = self.get_memory(project_id)
+        for entry in memory["entries"]:
+            if entry["id"] == memory_id:
+                entry.update(updates)
+                self.save_memory(project_id, memory)
+                return entry
+        return None
+
+    def delete_memory_entry(self, project_id: str, memory_id: str) -> bool:
+        """メモリエントリを削除"""
+        memory = self.get_memory(project_id)
+        original_len = len(memory["entries"])
+        memory["entries"] = [e for e in memory["entries"] if e["id"] != memory_id]
+        if len(memory["entries"]) < original_len:
+            self.save_memory(project_id, memory)
+            return True
+        return False
+
+    def clear_memory(self, project_id: str):
+        """全メモリを削除"""
+        memory = self.get_memory(project_id)
+        memory["entries"] = []
+        self.save_memory(project_id, memory)
+
+    # ========== サマリー操作 ==========
+
+    def get_summaries(self, project_id: str) -> Dict[str, Any]:
+        """会話サマリー一覧を取得"""
+        blob = self.bucket.blob(self._path(project_id, "", "summaries.json"))
+        if blob.exists():
+            try:
+                return json.loads(blob.download_as_text())
+            except Exception:
+                pass
+        return {
+            "version": 1,
+            "max_entries": 15,
+            "entries": []
+        }
+
+    def save_summaries(self, project_id: str, summaries: Dict[str, Any]):
+        """会話サマリーを保存"""
+        blob = self.bucket.blob(self._path(project_id, "", "summaries.json"))
+        blob.upload_from_string(json.dumps(summaries, ensure_ascii=False, indent=2), content_type="application/json")
+
+    def add_summary(self, project_id: str, summary: Dict[str, Any], max_entries: int = 15):
+        """サマリーを追加（max_entries超過時は古いものを削除）"""
+        summaries = self.get_summaries(project_id)
+        if "summarized_at" not in summary:
+            summary["summarized_at"] = datetime.utcnow().isoformat()
+        summaries["entries"].insert(0, summary)
+        if len(summaries["entries"]) > max_entries:
+            summaries["entries"] = summaries["entries"][:max_entries]
+        self.save_summaries(project_id, summaries)
+
+    def delete_summary(self, project_id: str, conversation_id: str) -> bool:
+        """特定の会話サマリーを削除"""
+        summaries = self.get_summaries(project_id)
+        original_len = len(summaries["entries"])
+        summaries["entries"] = [s for s in summaries["entries"] if s["conversation_id"] != conversation_id]
+        if len(summaries["entries"]) < original_len:
+            self.save_summaries(project_id, summaries)
+            return True
+        return False
+
+    def clear_summaries(self, project_id: str):
+        """全サマリーを削除"""
+        summaries = self.get_summaries(project_id)
+        summaries["entries"] = []
+        self.save_summaries(project_id, summaries)
+
 
 _backend = None
 
@@ -308,3 +540,57 @@ def delete_project(project_id: str):
 
 def create_project(project_id: str) -> Dict[str, str]:
     return _get_backend().create_project(project_id)
+
+
+# ========== メモリ Public API ==========
+
+def get_memory(project_id: str = "default") -> Dict[str, Any]:
+    """ユーザーメモリを取得"""
+    return _get_backend().get_memory(project_id)
+
+
+def save_memory(memory: Dict[str, Any], project_id: str = "default"):
+    """ユーザーメモリを保存"""
+    return _get_backend().save_memory(project_id, memory)
+
+
+def add_memory_entry(entry: Dict[str, Any], project_id: str = "default") -> Dict[str, Any]:
+    """メモリエントリを追加"""
+    return _get_backend().add_memory_entry(project_id, entry)
+
+
+def update_memory_entry(memory_id: str, updates: Dict[str, Any], project_id: str = "default") -> Optional[Dict[str, Any]]:
+    """メモリエントリを更新"""
+    return _get_backend().update_memory_entry(project_id, memory_id, updates)
+
+
+def delete_memory_entry(memory_id: str, project_id: str = "default") -> bool:
+    """メモリエントリを削除"""
+    return _get_backend().delete_memory_entry(project_id, memory_id)
+
+
+def clear_memory(project_id: str = "default"):
+    """全メモリを削除"""
+    return _get_backend().clear_memory(project_id)
+
+
+# ========== サマリー Public API ==========
+
+def get_summaries(project_id: str = "default") -> Dict[str, Any]:
+    """会話サマリー一覧を取得"""
+    return _get_backend().get_summaries(project_id)
+
+
+def add_summary(summary: Dict[str, Any], project_id: str = "default", max_entries: int = 15):
+    """サマリーを追加"""
+    return _get_backend().add_summary(project_id, summary, max_entries)
+
+
+def delete_summary(conversation_id: str, project_id: str = "default") -> bool:
+    """特定の会話サマリーを削除"""
+    return _get_backend().delete_summary(project_id, conversation_id)
+
+
+def clear_summaries(project_id: str = "default"):
+    """全サマリーを削除"""
+    return _get_backend().clear_summaries(project_id)

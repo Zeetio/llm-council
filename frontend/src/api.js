@@ -6,19 +6,76 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 let projectId = localStorage.getItem('project_id') || 'default';
+// 認証済みプロジェクトのパスワードを一時保存（セッション内）
+let projectPassword = null;
 
 export function setProjectId(id) {
   projectId = id || 'default';
   localStorage.setItem('project_id', projectId);
+  // プロジェクト変更時にパスワードをクリア
+  projectPassword = null;
 }
 
 export function getProjectId() {
   return projectId;
 }
 
+/**
+ * 認証済みパスワードを設定（セッション内でのみ有効）
+ */
+export function setProjectPassword(password) {
+  projectPassword = password;
+}
+
+/**
+ * 認証済みパスワードをクリア
+ */
+export function clearProjectPassword() {
+  projectPassword = null;
+}
+
 function withProject(url) {
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}project_id=${encodeURIComponent(projectId)}`;
+}
+
+/**
+ * 認証ヘッダーを含むヘッダーオブジェクトを生成
+ */
+function getAuthHeaders(contentType = 'application/json') {
+  const headers = {};
+  if (contentType) {
+    headers['Content-Type'] = contentType;
+  }
+  if (projectPassword) {
+    headers['X-Project-Password'] = projectPassword;
+  }
+  return headers;
+}
+
+/**
+ * セッションメタデータを収集
+ */
+export function collectSessionMetadata() {
+  return {
+    device: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
+    os: navigator.platform || navigator.userAgentData?.platform || 'Unknown',
+    browser: getBrowserName(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: navigator.language,
+  };
+}
+
+/**
+ * ブラウザ名を取得
+ */
+function getBrowserName() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Firefox')) return 'Firefox';
+  if (ua.includes('Chrome')) return 'Chrome';
+  if (ua.includes('Safari')) return 'Safari';
+  if (ua.includes('Edge')) return 'Edge';
+  return 'Unknown';
 }
 
 export const api = {
@@ -96,15 +153,17 @@ export const api = {
 
   /**
    * Update council configuration.
+   * パスワード保護プロジェクトでは認証ヘッダーが必要
    */
   async updateConfig(config) {
     const response = await fetch(withProject(`${API_BASE}/api/config`), {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(config),
     });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
     if (!response.ok) {
       throw new Error('Failed to update config');
     }
@@ -152,14 +211,93 @@ export const api = {
     return response.json();
   },
 
+  // ==========================================================================
+  // プロジェクト認証API
+  // ==========================================================================
+
+  /**
+   * プロジェクトの認証状態を取得
+   */
+  async getProjectAuthStatus(targetProjectId) {
+    const response = await fetch(
+      `${API_BASE}/api/projects/${encodeURIComponent(targetProjectId)}/auth/status`
+    );
+    if (!response.ok) {
+      throw new Error('Failed to get auth status');
+    }
+    return response.json();
+  },
+
+  /**
+   * プロジェクトのパスワードを検証
+   */
+  async verifyProjectPassword(targetProjectId, password) {
+    const response = await fetch(
+      `${API_BASE}/api/projects/${encodeURIComponent(targetProjectId)}/auth/verify`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      }
+    );
+    if (response.status === 401) {
+      return { valid: false, error: 'Invalid password' };
+    }
+    if (!response.ok) {
+      throw new Error('Failed to verify password');
+    }
+    return response.json();
+  },
+
+  /**
+   * プロジェクトのパスワードを設定
+   */
+  async setProjectPassword(targetProjectId, password, currentPassword = null) {
+    const response = await fetch(
+      `${API_BASE}/api/projects/${encodeURIComponent(targetProjectId)}/auth/set`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, current_password: currentPassword }),
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || 'Failed to set password');
+    }
+    return response.json();
+  },
+
+  /**
+   * プロジェクトのパスワードを削除
+   */
+  async removeProjectPassword(targetProjectId, password) {
+    const response = await fetch(
+      `${API_BASE}/api/projects/${encodeURIComponent(targetProjectId)}/auth`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to remove password');
+    }
+    return response.json();
+  },
+
   /**
    * Send a message and receive streaming updates.
    * @param {string} conversationId - The conversation ID
    * @param {string} content - The message content
+   * @param {Array} userComments - ユーザーコメント（フィードバック）の配列
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent) {
+  async sendMessageStream(conversationId, content, userComments, onEvent, abortSignal) {
+    // セッションメタデータを収集して送信
+    const sessionMetadata = collectSessionMetadata();
+
     const response = await fetch(
       withProject(`${API_BASE}/api/conversations/${conversationId}/message/stream`),
       {
@@ -167,7 +305,12 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          user_comments: userComments || [],
+          session_metadata: sessionMetadata,
+        }),
+        signal: abortSignal, // AbortController対応
       }
     );
 
@@ -178,24 +321,194 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          try {
-            const event = JSON.parse(data);
-            onEvent(event.type, event);
-          } catch (e) {
-            console.error('Failed to parse SSE event:', e);
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const event = JSON.parse(data);
+              onEvent(event.type, event);
+            } catch (e) {
+              console.error('Failed to parse SSE event:', e);
+            }
           }
         }
       }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        onEvent('aborted', { message: 'Request was cancelled' });
+        return;
+      }
+      throw e;
     }
+  },
+
+  // ==========================================================================
+  // メモリAPI（パスワード保護対応）
+  // ==========================================================================
+
+  /**
+   * ユーザーメモリを取得
+   */
+  async getMemory() {
+    const response = await fetch(withProject(`${API_BASE}/api/memory`), {
+      headers: getAuthHeaders(null),
+    });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to get memory');
+    }
+    return response.json();
+  },
+
+  /**
+   * メモリエントリを追加
+   */
+  async addMemory(category, key, value) {
+    const response = await fetch(withProject(`${API_BASE}/api/memory`), {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ category, key, value }),
+    });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to add memory');
+    }
+    return response.json();
+  },
+
+  /**
+   * メモリエントリを更新
+   */
+  async updateMemory(memoryId, updates) {
+    const response = await fetch(
+      withProject(`${API_BASE}/api/memory/${encodeURIComponent(memoryId)}`),
+      {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updates),
+      }
+    );
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (response.status === 404) {
+      throw new Error('メモリエントリが見つかりません');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to update memory');
+    }
+    return response.json();
+  },
+
+  /**
+   * メモリエントリを削除
+   */
+  async deleteMemory(memoryId) {
+    const response = await fetch(
+      withProject(`${API_BASE}/api/memory/${encodeURIComponent(memoryId)}`),
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(null),
+      }
+    );
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (response.status === 404) {
+      throw new Error('メモリエントリが見つかりません');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to delete memory');
+    }
+    return response.json();
+  },
+
+  /**
+   * 全メモリをクリア
+   */
+  async clearMemory() {
+    const response = await fetch(withProject(`${API_BASE}/api/memory`), {
+      method: 'DELETE',
+      headers: getAuthHeaders(null),
+    });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to clear memory');
+    }
+    return response.json();
+  },
+
+  // ==========================================================================
+  // サマリーAPI（パスワード保護対応）
+  // ==========================================================================
+
+  /**
+   * 会話サマリー一覧を取得
+   */
+  async getSummaries() {
+    const response = await fetch(withProject(`${API_BASE}/api/summaries`), {
+      headers: getAuthHeaders(null),
+    });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to get summaries');
+    }
+    return response.json();
+  },
+
+  /**
+   * 特定の会話サマリーを削除
+   */
+  async deleteSummary(conversationId) {
+    const response = await fetch(
+      withProject(`${API_BASE}/api/summaries/${encodeURIComponent(conversationId)}`),
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(null),
+      }
+    );
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (response.status === 404) {
+      throw new Error('サマリーが見つかりません');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to delete summary');
+    }
+    return response.json();
+  },
+
+  /**
+   * 全サマリーをクリア
+   */
+  async clearSummaries() {
+    const response = await fetch(withProject(`${API_BASE}/api/summaries`), {
+      method: 'DELETE',
+      headers: getAuthHeaders(null),
+    });
+    if (response.status === 401) {
+      throw new Error('認証が必要です');
+    }
+    if (!response.ok) {
+      throw new Error('Failed to clear summaries');
+    }
+    return response.json();
   },
 };
