@@ -258,9 +258,9 @@ deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--set-env-vars="STORAGE_BACKEND=gcs,GCS_BUCKET=$$bucket" \
 		--memory 8Gi \
-		--cpu 2 \
+		--cpu 1 \
 		--min-instances 0 \
-		--max-instances 2
+		--max-instances 1
 
 deploy-status: ## デプロイ状況を確認
 	gcloud run services describe $(CLOUD_RUN_SERVICE) --region $(GCP_REGION) --format="yaml(status)"

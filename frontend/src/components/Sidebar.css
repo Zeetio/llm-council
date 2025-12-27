@@ -5,6 +5,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  z-index: 20;
 }
 
 .sidebar-header {
@@ -78,6 +79,28 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-close-btn {
+  background: none;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sidebar-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .sidebar-header h1 {
@@ -195,4 +218,24 @@
 .conversation-delete-btn:hover {
   color: var(--accent-red);
   background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 78vw;
+    max-width: 320px;
+  }
+
+  .sidebar--mobile {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 12px 0 24px rgba(15, 23, 42, 0.2);
+  }
+
+  .sidebar--mobile.sidebar--open {
+    transform: translateX(0);
+  }
 }

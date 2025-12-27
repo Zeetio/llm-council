@@ -9,11 +9,13 @@ let projectId = localStorage.getItem('project_id') || 'default';
 // 認証済みプロジェクトのパスワードを一時保存（セッション内）
 let projectPassword = null;
 
-export function setProjectId(id) {
+export function setProjectId(id, options = {}) {
   projectId = id || 'default';
   localStorage.setItem('project_id', projectId);
-  // プロジェクト変更時にパスワードをクリア
-  projectPassword = null;
+  // プロジェクト変更時にパスワードをクリア（必要な場合のみ）
+  if (!options.preservePassword) {
+    projectPassword = null;
+  }
 }
 
 export function getProjectId() {

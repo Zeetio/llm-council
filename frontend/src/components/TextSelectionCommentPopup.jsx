@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 import './TextSelectionCommentPopup.css';
 
 /**
@@ -24,13 +24,6 @@ export default function TextSelectionCommentPopup({
     top: anchorRect?.bottom ?? 0,
     left: anchorRect?.left ?? 0,
   });
-
-  // ポップアップ表示時にフォーカス
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, []);
 
   // ビューポート内に収まるように位置を調整
   useLayoutEffect(() => {

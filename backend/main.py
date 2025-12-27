@@ -199,6 +199,10 @@ async def send_message(conversation_id: str, request: SendMessageRequest, projec
             project_id
         )
     )
+    # 会話サマリー更新を非同期で実行
+    asyncio.create_task(
+        generate_conversation_summary(conversation_id, project_id)
+    )
 
     # Return the complete response with metadata
     return {
@@ -306,6 +310,10 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
                     conversation_id,
                     project_id
                 )
+            )
+            # 会話サマリー更新を非同期で実行
+            asyncio.create_task(
+                generate_conversation_summary(conversation_id, project_id)
             )
 
             # ツールログをLLMロガーに統合

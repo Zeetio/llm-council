@@ -82,6 +82,9 @@ export default function ChatInterface({
   onDeleteComment,
   onStopGeneration,
   pendingComments = [],
+  onToggleSidebar,
+  isMobile = false,
+  isSidebarOpen = false,
 }) {
   const [input, setInput] = useState('');
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -176,27 +179,51 @@ export default function ChatInterface({
     clearSelection();
   };
 
-  if (!conversation) {
-    return (
-      <div className="chat-interface">
-        <div className="empty-state">
-          <h2>Welcome to LLM Council</h2>
-          <p>Create a new conversation to get started</p>
-        </div>
-      </div>
-    );
-  }
+  const hasConversation = Boolean(conversation);
+  const messages = conversation?.messages ?? [];
+  const conversationTitle = conversation?.title || 'LLM Council';
 
   return (
     <div className="chat-interface">
+      {isMobile && (
+        <div className="chat-header">
+          <button
+            type="button"
+            className="menu-button"
+            onClick={() => onToggleSidebar?.()}
+            aria-label="Open sidebar"
+          >
+            ☰
+          </button>
+          <div className="chat-header__title">
+            {conversationTitle}
+          </div>
+        </div>
+      )}
+
+      {isMobile && !isSidebarOpen && (
+        <button
+          type="button"
+          className="menu-button menu-button--floating"
+          onClick={() => onToggleSidebar?.()}
+          aria-label="Open sidebar"
+        >
+          ☰
+        </button>
+      )}
       <div className="messages-container" ref={messagesContainerRef}>
-        {conversation.messages.length === 0 ? (
+        {!hasConversation ? (
+          <div className="empty-state">
+            <h2>Welcome to LLM Council</h2>
+            <p>Create a new conversation to get started</p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>
             <p>Ask a question to consult the LLM Council</p>
           </div>
         ) : (
-          conversation.messages.map((msg, index) => (
+          messages.map((msg, index) => (
             <MessageItem key={index} msg={msg} />
           ))
         )}
@@ -211,107 +238,111 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 保留中のコメント表示 */}
-      {pendingComments.length > 0 && (
-        <div className="pending-comments">
-          <div className="pending-comments__header">
-            <span className="pending-comments__icon">💬</span>
-            <span className="pending-comments__title">
-              {pendingComments.length}件のフィードバックが次の送信に含まれます
-            </span>
-          </div>
-          <div className="pending-comments__list">
-            {pendingComments.map((c) => (
-              <div key={c.id} className="pending-comment">
-                <span className="pending-comment__text">
-                  「{c.selectedText?.length > 30 ? c.selectedText.substring(0, 30) + '...' : c.selectedText}」
+      {hasConversation && (
+        <>
+          {/* 保留中のコメント表示 */}
+          {pendingComments.length > 0 && (
+            <div className="pending-comments">
+              <div className="pending-comments__header">
+                <span className="pending-comments__icon">💬</span>
+                <span className="pending-comments__title">
+                  {pendingComments.length}件のフィードバックが次の送信に含まれます
                 </span>
-                <span className="pending-comment__arrow">→</span>
-                <span className="pending-comment__feedback">
-                  {c.comment?.length > 50 ? c.comment.substring(0, 50) + '...' : c.comment}
-                </span>
-                <button
-                  type="button"
-                  className="pending-comment__delete"
-                  onClick={() => onDeleteComment(c.id)}
-                  title="削除"
-                >
-                  ×
-                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <form className="input-form" onSubmit={handleSubmit}>
-        <div className="input-wrapper">
-          {attachedFiles.length > 0 && (
-            <div className="attached-files">
-              {attachedFiles.map((file, index) => (
-                <div key={index} className="attached-file">
-                  <span className="file-name">{file.name}</span>
-                  <button
-                    type="button"
-                    className="remove-file"
-                    onClick={() => removeFile(index)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+              <div className="pending-comments__list">
+                {pendingComments.map((c) => (
+                  <div key={c.id} className="pending-comment">
+                    <span className="pending-comment__text">
+                      「{c.selectedText?.length > 30 ? c.selectedText.substring(0, 30) + '...' : c.selectedText}」
+                    </span>
+                    <span className="pending-comment__arrow">→</span>
+                    <span className="pending-comment__feedback">
+                      {c.comment?.length > 50 ? c.comment.substring(0, 50) + '...' : c.comment}
+                    </span>
+                    <button
+                      type="button"
+                      className="pending-comment__delete"
+                      onClick={() => onDeleteComment(c.id)}
+                      title="削除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-          <textarea
-            className="message-input"
-            placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            rows={3}
-          />
-        </div>
-        <div className="input-actions">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            accept=".md,.txt,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.yml,.yaml,.xml,.csv,.log"
-            multiple
-            style={{ display: 'none' }}
-          />
-          <button
-            type="button"
-            className="attach-button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            title="Attach files"
-          >
-            📎
-          </button>
-          {isLoading ? (
-            <button
-              type="button"
-              className="stop-button"
-              onClick={onStopGeneration}
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="send-button"
-              disabled={!input.trim() && attachedFiles.length === 0}
-            >
-              Send
-            </button>
-          )}
-        </div>
-      </form>
+
+          <form className="input-form" onSubmit={handleSubmit}>
+            <div className="input-wrapper">
+              {attachedFiles.length > 0 && (
+                <div className="attached-files">
+                  {attachedFiles.map((file, index) => (
+                    <div key={index} className="attached-file">
+                      <span className="file-name">{file.name}</span>
+                      <button
+                        type="button"
+                        className="remove-file"
+                        onClick={() => removeFile(index)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <textarea
+                className="message-input"
+                placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                rows={3}
+              />
+            </div>
+            <div className="input-actions">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                accept=".md,.txt,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.yml,.yaml,.xml,.csv,.log"
+                multiple
+                style={{ display: 'none' }}
+              />
+              <button
+                type="button"
+                className="attach-button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                title="Attach files"
+              >
+                📎
+              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  className="stop-button"
+                  onClick={onStopGeneration}
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="send-button"
+                  disabled={!input.trim() && attachedFiles.length === 0}
+                >
+                  Send
+                </button>
+              )}
+            </div>
+          </form>
+        </>
+      )}
 
       {/* テキスト選択時のコメントポップアップ（position: fixedなのでどこに配置しても良い） */}
-      {selectedText && anchorRect && (
+      {hasConversation && selectedText && anchorRect && (
         <TextSelectionCommentPopup
           anchorRect={anchorRect}
           selectedText={selectedText}

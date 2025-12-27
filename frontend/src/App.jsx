@@ -14,6 +14,10 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [projectId, setProjectId] = useState(apiGetProjectId());
   const [projects, setProjects] = useState([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const lastIsMobileRef = useRef(null);
+  const preservePasswordRef = useRef(false);
 
   // パスワードダイアログ関連の状態
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
@@ -30,7 +34,8 @@ function App() {
   // Load conversations on mount（パスワード確認付き）
   useEffect(() => {
     const initializeProject = async () => {
-      apiSetProjectId(projectId);
+      apiSetProjectId(projectId, { preservePassword: preservePasswordRef.current });
+      preservePasswordRef.current = false;
 
       // パスワード保護状態を確認
       try {
@@ -55,6 +60,23 @@ function App() {
 
     initializeProject();
   }, [projectId]);
+
+  useEffect(() => {
+    const updateLayout = () => {
+      if (typeof window === 'undefined') return;
+      const mobile = window.innerWidth <= 900;
+      setIsMobile(mobile);
+      const lastIsMobile = lastIsMobileRef.current;
+      if (lastIsMobile === null || lastIsMobile !== mobile) {
+        setIsSidebarOpen(!mobile);
+      }
+      lastIsMobileRef.current = mobile;
+    };
+
+    updateLayout();
+    window.addEventListener('resize', updateLayout);
+    return () => window.removeEventListener('resize', updateLayout);
+  }, []);
 
   const loadProjects = async () => {
     try {
@@ -128,6 +150,7 @@ function App() {
         loadProjects();
       } else {
         // プロジェクト切り替え時の認証成功
+        preservePasswordRef.current = true;
         completeProjectChange(pendingProjectId);
       }
     }
@@ -445,7 +468,18 @@ function App() {
         onRefreshProjects={loadProjects}
         onDeleteProject={handleDeleteProject}
         onCreateProject={handleCreateProject}
+        isMobile={isMobile}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
+      {isMobile && isSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="Close sidebar"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
       <ChatInterface
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
@@ -454,6 +488,9 @@ function App() {
         onDeleteComment={handleDeleteComment}
         onStopGeneration={handleStopGeneration}
         pendingComments={userComments}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        isMobile={isMobile}
+        isSidebarOpen={isSidebarOpen}
       />
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
       {showPasswordDialog && pendingProjectId && (

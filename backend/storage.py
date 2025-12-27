@@ -226,6 +226,16 @@ class LocalStorage:
         summaries = self.get_summaries(project_id)
         if "summarized_at" not in summary:
             summary["summarized_at"] = datetime.utcnow().isoformat()
+        existing = next(
+            (s for s in summaries.get("entries", []) if s.get("conversation_id") == summary.get("conversation_id")),
+            None
+        )
+        if existing and existing.get("message_count", 0) >= summary.get("message_count", 0):
+            return
+        summaries["entries"] = [
+            s for s in summaries.get("entries", [])
+            if s.get("conversation_id") != summary.get("conversation_id")
+        ]
         summaries["entries"].insert(0, summary)  # 新しいものを先頭に
         # 古いものを削除
         if len(summaries["entries"]) > max_entries:
@@ -447,6 +457,16 @@ class GCSStorage:
         summaries = self.get_summaries(project_id)
         if "summarized_at" not in summary:
             summary["summarized_at"] = datetime.utcnow().isoformat()
+        existing = next(
+            (s for s in summaries.get("entries", []) if s.get("conversation_id") == summary.get("conversation_id")),
+            None
+        )
+        if existing and existing.get("message_count", 0) >= summary.get("message_count", 0):
+            return
+        summaries["entries"] = [
+            s for s in summaries.get("entries", [])
+            if s.get("conversation_id") != summary.get("conversation_id")
+        ]
         summaries["entries"].insert(0, summary)
         if len(summaries["entries"]) > max_entries:
             summaries["entries"] = summaries["entries"][:max_entries]

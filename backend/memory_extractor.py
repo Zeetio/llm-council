@@ -236,7 +236,10 @@ SUMMARY_GENERATION_PROMPT = """以下の会話を要約してください。
 会話タイトル: {title}
 メッセージ数: {message_count}
 
-会話内容:
+既存サマリー:
+{previous_summary}
+
+新しい会話内容（直近の抜粋）:
 {conversation_content}
 
 以下のJSON形式で要約を作成してください（コードブロックなしで純粋なJSONのみ）:
@@ -248,10 +251,42 @@ SUMMARY_GENERATION_PROMPT = """以下の会話を要約してください。
 }}
 
 注意:
+- 既存サマリーがあれば更新するつもりで書き直す（古い情報は必要に応じて置き換える）
 - 要約は簡潔かつ情報量を保つ
 - key_topicsは3-5個程度
 - 技術的な詳細よりも「何を達成しようとしていたか」に焦点
 - 必ず有効なJSON形式で回答"""
+
+
+def _build_recent_conversation_content(messages: List[Dict[str, Any]], max_chars: int = 3000, max_messages: int = 12) -> str:
+    """直近の会話だけを取り出して要約入力にする（先頭だけの偏りを防ぐ）。"""
+    lines = []
+    total_len = 0
+
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            final_response = msg.get("stage3", {}).get("response", "")
+            if not final_response:
+                continue
+            line = f"アシスタント: {final_response}"
+        else:
+            line = f"ユーザー: {msg.get('content', '')}"
+
+        if not line.strip():
+            continue
+
+        line_len = len(line) + 1
+        if lines and total_len + line_len > max_chars:
+            break
+
+        lines.append(line)
+        total_len += line_len
+
+        if len(lines) >= max_messages:
+            break
+
+    lines.reverse()
+    return "\n".join(lines)
 
 
 async def generate_conversation_summary(
@@ -283,29 +318,34 @@ async def generate_conversation_summary(
         logger.debug("No messages to summarize")
         return None
 
-    # 会話内容を構築
-    conversation_lines = []
-    for msg in messages:
-        if msg["role"] == "user":
-            conversation_lines.append(f"ユーザー: {msg['content']}")
-        elif msg["role"] == "assistant":
-            # Stage3の最終回答を使用
-            final_response = msg.get("stage3", {}).get("response", "")
-            if final_response:
-                # 長すぎる場合は切り詰め
-                if len(final_response) > 500:
-                    final_response = final_response[:500] + "..."
-                conversation_lines.append(f"アシスタント: {final_response}")
+    # 既存サマリーを取得（ローリング更新のため）
+    summaries = storage.get_summaries(project_id)
+    existing_summary = next(
+        (s for s in summaries.get("entries", []) if s.get("conversation_id") == conversation_id),
+        None
+    )
 
-    conversation_content = "\n".join(conversation_lines)
-    # 全体が長すぎる場合は切り詰め
-    if len(conversation_content) > 3000:
-        conversation_content = conversation_content[:3000] + "\n..."
+    if existing_summary:
+        previous_summary = (
+            f"summary: {existing_summary.get('summary', '')}\n"
+            f"key_topics: {existing_summary.get('key_topics', [])}\n"
+            f"user_intent: {existing_summary.get('user_intent', '')}\n"
+            f"outcome: {existing_summary.get('outcome', '')}"
+        )
+    else:
+        previous_summary = "なし"
+
+    # 直近の会話のみを構築（先頭偏りを防ぐ）
+    conversation_content = _build_recent_conversation_content(messages)
+    if not conversation_content.strip():
+        logger.debug("No recent content to summarize")
+        return None
 
     # プロンプト構築
     prompt = SUMMARY_GENERATION_PROMPT.format(
         title=conversation.get("title", "無題"),
         message_count=len(messages),
+        previous_summary=previous_summary,
         conversation_content=conversation_content
     )
 
