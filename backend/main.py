@@ -26,6 +26,7 @@ from .council import run_full_council, generate_conversation_title, stage1_colle
 from .memory_extractor import extract_memory_from_conversation, generate_conversation_summary
 from .llm_logger import LLMLogger
 from .tools import ToolLogger
+from .job_manager import get_job_manager
 
 app = FastAPI(title="LLM Council API")
 
@@ -343,6 +344,201 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
             "Connection": "keep-alive",
         }
     )
+
+
+async def execute_council_job(
+    job_id: str,
+    conversation_id: str,
+    content: str,
+    user_comments: List[Dict[str, Any]],
+    project_id: str,
+    session_metadata: Optional[Dict[str, Any]]
+):
+    """
+    バックグラウンドで3ステージ評議会を実行し、ジョブ状態を逐次更新
+
+    Args:
+        job_id: ジョブID
+        conversation_id: 会話ID
+        content: ユーザーメッセージ
+        user_comments: ユーザーコメント
+        project_id: プロジェクトID
+        session_metadata: セッションメタデータ
+    """
+    job_mgr = get_job_manager()
+
+    try:
+        logger.info(f"[Job {job_id[:8]}] Starting background execution for conversation {conversation_id[:8]}")
+
+        # LLMロガーとツールロガーを初期化
+        llm_logger = LLMLogger()
+        tool_logger = ToolLogger()
+
+        # 会話履歴取得
+        conversation = storage.get_conversation(conversation_id, project_id)
+        if conversation is None:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        conversation_history = conversation.get("messages", [])
+        is_first_message = len(conversation_history) == 0
+
+        # ユーザーメッセージ追加
+        storage.add_user_message(conversation_id, content, project_id)
+
+        # タイトル生成（並列実行）
+        title_task = None
+        if is_first_message:
+            title_task = asyncio.create_task(generate_conversation_title(content))
+
+        # Stage 1: 個別モデルの回答収集
+        logger.info(f"[Job {job_id[:8]}] Stage 1: Starting")
+        job_mgr.update_job_stage(job_id, "stage1", "running", project_id=project_id)
+
+        stage1_results = await stage1_collect_responses(
+            content,
+            conversation_history,
+            user_comments,
+            project_id,
+            session_metadata,
+            llm_logger=llm_logger,
+            tool_logger=tool_logger
+        )
+
+        job_mgr.update_job_stage(job_id, "stage1", "completed", data=stage1_results, project_id=project_id)
+        logger.info(f"[Job {job_id[:8]}] Stage 1: Complete ({len(stage1_results)} responses)")
+
+        # Stage 2: ランキング収集
+        logger.info(f"[Job {job_id[:8]}] Stage 2: Starting")
+        job_mgr.update_job_stage(job_id, "stage2", "running", project_id=project_id)
+
+        stage2_results, label_to_id = await stage2_collect_rankings(
+            content,
+            stage1_results,
+            project_id,
+            llm_logger=llm_logger
+        )
+        aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_id)
+
+        metadata = {
+            "label_to_id": label_to_id,
+            "aggregate_rankings": aggregate_rankings
+        }
+        job_mgr.update_job_stage(job_id, "stage2", "completed", data=stage2_results, metadata=metadata, project_id=project_id)
+        logger.info(f"[Job {job_id[:8]}] Stage 2: Complete ({len(stage2_results)} rankings)")
+
+        # Stage 3: 最終合成
+        logger.info(f"[Job {job_id[:8]}] Stage 3: Starting")
+        job_mgr.update_job_stage(job_id, "stage3", "running", project_id=project_id)
+
+        stage3_result = await stage3_synthesize_final(
+            content,
+            stage1_results,
+            stage2_results,
+            project_id,
+            llm_logger=llm_logger
+        )
+
+        job_mgr.update_job_stage(job_id, "stage3", "completed", data=stage3_result, project_id=project_id)
+        logger.info(f"[Job {job_id[:8]}] Stage 3: Complete")
+
+        # タイトル生成待機
+        if title_task:
+            title = await title_task
+            storage.update_conversation_title(conversation_id, title, project_id)
+
+        # アシスタントメッセージ保存
+        storage.add_assistant_message(
+            conversation_id,
+            stage1_results,
+            stage2_results,
+            stage3_result,
+            project_id
+        )
+
+        # メモリ抽出を非同期で実行
+        asyncio.create_task(
+            extract_memory_from_conversation(
+                content,
+                stage3_result.get("response", ""),
+                conversation_id,
+                project_id
+            )
+        )
+        # 会話サマリー更新を非同期で実行
+        asyncio.create_task(
+            generate_conversation_summary(conversation_id, project_id)
+        )
+
+        # ツールログをLLMロガーに統合
+        llm_logger.add_tool_logs(tool_logger.get_logs())
+
+        # 使用量サマリーを取得
+        usage_summary = llm_logger.get_summary()
+        logger.info(
+            f"[Job {job_id[:8]}] Usage: {usage_summary.get('total_tokens', 0)} tokens, "
+            f"${usage_summary.get('total_cost_usd', 0):.6f}"
+        )
+
+        # ジョブ完了
+        job_mgr.complete_job(job_id, usage=usage_summary, project_id=project_id)
+        logger.info(f"[Job {job_id[:8]}] Background execution complete")
+
+    except Exception as e:
+        logger.error(f"[Job {job_id[:8]}] Error: {e}")
+        job_mgr.fail_job(job_id, str(e), project_id=project_id)
+
+
+@app.post("/api/conversations/{conversation_id}/message/job")
+async def send_message_job(conversation_id: str, request: SendMessageRequest, project_id: str = Query("default", alias="project_id")):
+    """
+    メッセージを送信してバックグラウンドで評議会を実行。
+    ジョブIDを即座に返し、クライアントはポーリングで進捗を取得する。
+    """
+    # 会話の存在確認
+    conversation = storage.get_conversation(conversation_id, project_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # ジョブを作成
+    job_mgr = get_job_manager()
+    job_data = job_mgr.create_job(conversation_id, project_id)
+    job_id = job_data["job_id"]
+
+    # バックグラウンドタスクを開始
+    asyncio.create_task(
+        execute_council_job(
+            job_id,
+            conversation_id,
+            request.content,
+            request.user_comments,
+            project_id,
+            request.session_metadata
+        )
+    )
+
+    # ジョブIDを即座に返す
+    return {
+        "job_id": job_id,
+        "status": "accepted",
+        "message": "Job started in background"
+    }
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job_status(job_id: str, project_id: str = Query("default", alias="project_id")):
+    """
+    ジョブの状態を取得
+
+    Returns:
+        ジョブデータ（status, progress, usage等）
+    """
+    job_mgr = get_job_manager()
+    job_data = job_mgr.get_job(job_id, project_id)
+
+    if job_data is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return job_data
 
 
 @app.get("/api/config")

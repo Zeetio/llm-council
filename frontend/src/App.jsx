@@ -78,6 +78,30 @@ function App() {
     return () => window.removeEventListener('resize', updateLayout);
   }, []);
 
+  // Page Visibility API: バックグラウンド・フォアグラウンド切り替えの監視
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('Page moved to background');
+        // バックグラウンドに移行時の処理（ポーリングは継続）
+      } else {
+        console.log('Page returned to foreground');
+        // フォアグラウンドに復帰時の処理
+        // 進行中のジョブがあれば会話をリロード（最新の進捗を取得）
+        if (isLoading && currentConversationId) {
+          console.log('Reloading conversation on foreground return');
+          loadConversation(currentConversationId);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isLoading, currentConversationId]);
+
   const loadProjects = async () => {
     try {
       const list = await api.listProjects();
@@ -270,11 +294,9 @@ function App() {
     }
   };
 
+  // ジョブベースのメッセージ送信（バックグラウンド実行対応）
   const handleSendMessage = async (content) => {
     if (!currentConversationId) return;
-
-    // AbortControllerを作成
-    abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
     try {
@@ -305,17 +327,33 @@ function App() {
         messages: [...prev.messages, assistantMessage],
       }));
 
-      // Send message with streaming（ユーザーコメントを含む）
+      // ユーザーコメントを準備してクリア
       const commentsToSend = [...userComments];
-      setUserComments([]); // コメントをクリア
+      setUserComments([]);
 
-      await api.sendMessageStream(
+      // ジョブを作成
+      const jobResponse = await api.sendMessageJob(
         currentConversationId,
         content,
-        commentsToSend,
-        (eventType, event) => {
-        switch (eventType) {
-          case 'stage1_start':
+        commentsToSend
+      );
+
+      const jobId = jobResponse.job_id;
+      console.log('Job created:', jobId);
+
+      // 前回のステージを記憶（重複更新を防ぐ）
+      let lastStage = null;
+
+      // ジョブをポーリング
+      await api.pollJob(
+        jobId,
+        (jobData) => {
+          const { progress, status } = jobData;
+          const currentStage = progress?.current_stage;
+
+          // ステージ1の更新
+          if (progress?.stage1?.status === 'running' && lastStage !== 'stage1-running') {
+            lastStage = 'stage1-running';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
@@ -325,22 +363,25 @@ function App() {
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'stage1_complete':
+          if (progress?.stage1?.status === 'completed' && progress?.stage1?.data && lastStage !== 'stage1-completed') {
+            lastStage = 'stage1-completed';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
               messages[lastIdx] = {
                 ...messages[lastIdx],
-                stage1: event.data,
+                stage1: progress.stage1.data,
                 loading: { ...messages[lastIdx].loading, stage1: false },
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'stage2_start':
+          // ステージ2の更新
+          if (progress?.stage2?.status === 'running' && lastStage !== 'stage2-running') {
+            lastStage = 'stage2-running';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
@@ -350,23 +391,26 @@ function App() {
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'stage2_complete':
+          if (progress?.stage2?.status === 'completed' && progress?.stage2?.data && lastStage !== 'stage2-completed') {
+            lastStage = 'stage2-completed';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
               messages[lastIdx] = {
                 ...messages[lastIdx],
-                stage2: event.data,
-                metadata: event.metadata,
+                stage2: progress.stage2.data,
+                metadata: progress.stage2.metadata,
                 loading: { ...messages[lastIdx].loading, stage2: false },
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'stage3_start':
+          // ステージ3の更新
+          if (progress?.stage3?.status === 'running' && lastStage !== 'stage3-running') {
+            lastStage = 'stage3-running';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
@@ -376,72 +420,42 @@ function App() {
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'stage3_complete':
+          if (progress?.stage3?.status === 'completed' && progress?.stage3?.data && lastStage !== 'stage3-completed') {
+            lastStage = 'stage3-completed';
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastIdx = messages.length - 1;
               messages[lastIdx] = {
                 ...messages[lastIdx],
-                stage3: event.data,
+                stage3: progress.stage3.data,
                 loading: { ...messages[lastIdx].loading, stage3: false },
               };
               return { ...prev, messages };
             });
-            break;
+          }
 
-          case 'title_complete':
-            // Reload conversations to get updated title
-            loadConversations();
-            break;
-
-          case 'complete':
-            // Stream complete - 使用量データを保存
-            if (event.usage) {
-              setCurrentConversation((prev) => {
-                const messages = [...prev.messages];
-                const lastIdx = messages.length - 1;
-                messages[lastIdx] = {
-                  ...messages[lastIdx],
-                  usage: event.usage,
-                };
-                return { ...prev, messages };
-              });
-            }
-            // Reload conversations list
-            loadConversations();
-            setIsLoading(false);
-            abortControllerRef.current = null;
-            break;
-
-          case 'aborted':
-            // ユーザーによる中断
-            console.log('Generation stopped by user');
-            setIsLoading(false);
-            abortControllerRef.current = null;
-            break;
-
-          case 'error':
-            console.error('Stream error:', event.message);
-            setIsLoading(false);
-            abortControllerRef.current = null;
-            break;
-
-          default:
-            console.log('Unknown event type:', eventType);
-        }
-      },
-        abortControllerRef.current?.signal
+          // 完了時の処理
+          if (status === 'completed' && jobData.usage) {
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastIdx = messages.length - 1;
+              messages[lastIdx] = {
+                ...messages[lastIdx],
+                usage: jobData.usage,
+              };
+              return { ...prev, messages };
+            });
+          }
+        },
+        { interval: 1000, timeout: 300000 }
       );
+
+      // ポーリング完了後、会話リストを再読み込み
+      loadConversations();
+      setIsLoading(false);
     } catch (error) {
-      // AbortErrorはユーザーによる中断なのでエラー扱いしない
-      if (error.name === 'AbortError') {
-        console.log('Request aborted by user');
-        setIsLoading(false);
-        abortControllerRef.current = null;
-        return;
-      }
       console.error('Failed to send message:', error);
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
@@ -449,7 +463,6 @@ function App() {
         messages: prev.messages.slice(0, -2),
       }));
       setIsLoading(false);
-      abortControllerRef.current = null;
     }
   };
 
