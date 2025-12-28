@@ -557,4 +557,96 @@ export const api = {
     }
     return response.json();
   },
+
+  // ==========================================================================
+  // ジョブAPI（バックグラウンド実行）
+  // ==========================================================================
+
+  /**
+   * メッセージを送信してジョブを作成（バックグラウンド実行）
+   * @param {string} conversationId - 会話ID
+   * @param {string} content - メッセージ内容
+   * @param {Array} userComments - ユーザーコメント
+   * @returns {Promise<Object>} - { job_id, status, message }
+   */
+  async sendMessageJob(conversationId, content, userComments) {
+    const sessionMetadata = collectSessionMetadata();
+
+    const response = await fetch(
+      withProject(`${API_BASE}/api/conversations/${conversationId}/message/job`),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          user_comments: userComments || [],
+          session_metadata: sessionMetadata,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to create job');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * ジョブの状態を取得
+   * @param {string} jobId - ジョブID
+   * @returns {Promise<Object>} - ジョブデータ
+   */
+  async getJobStatus(jobId) {
+    const response = await fetch(withProject(`${API_BASE}/api/jobs/${jobId}`));
+
+    if (!response.ok) {
+      throw new Error('Failed to get job status');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * ジョブの完了をポーリング
+   * @param {string} jobId - ジョブID
+   * @param {function} onUpdate - 更新時のコールバック (jobData) => void
+   * @param {Object} options - オプション { interval: ポーリング間隔(ms), timeout: タイムアウト(ms) }
+   * @returns {Promise<Object>} - 最終的なジョブデータ
+   */
+  async pollJob(jobId, onUpdate, options = {}) {
+    const interval = options.interval || 1000; // デフォルト1秒
+    const timeout = options.timeout || 300000; // デフォルト5分
+    const startTime = Date.now();
+
+    while (true) {
+      // タイムアウトチェック
+      if (Date.now() - startTime > timeout) {
+        throw new Error('Job polling timeout');
+      }
+
+      try {
+        const jobData = await this.getJobStatus(jobId);
+
+        // 更新コールバック
+        if (onUpdate) {
+          onUpdate(jobData);
+        }
+
+        // 完了または失敗したら終了
+        if (jobData.status === 'completed' || jobData.status === 'failed') {
+          return jobData;
+        }
+
+        // 次のポーリングまで待機
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      } catch (error) {
+        // エラー時は少し待ってリトライ
+        console.error('Polling error:', error);
+        await new Promise((resolve) => setTimeout(resolve, interval * 2));
+      }
+    }
+  },
 };

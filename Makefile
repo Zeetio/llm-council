@@ -243,7 +243,8 @@ deploy: docker-push ## Cloud Runにデプロイ（常にキャッシュなしビ
 		--memory 4Gi \
 		--cpu 1 \
 		--min-instances 0 \
-		--max-instances 1
+		--max-instances 1 \
+		--timeout 300
 	@echo ""
 	@echo "✓ デプロイ完了（IAM認証有効）"
 	@echo "アクセスするには: gcloud run services proxy $(CLOUD_RUN_SERVICE) --region $(GCP_REGION)"
@@ -260,7 +261,8 @@ deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定
 		--memory 8Gi \
 		--cpu 1 \
 		--min-instances 0 \
-		--max-instances 1
+		--max-instances 1 \
+		--timeout 300
 
 deploy-status: ## デプロイ状況を確認
 	gcloud run services describe $(CLOUD_RUN_SERVICE) --region $(GCP_REGION) --format="yaml(status)"
