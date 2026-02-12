@@ -5,6 +5,7 @@
 .app {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
   width: 100vw;
   overflow: hidden;
   background: var(--bg-primary);

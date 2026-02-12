@@ -95,3 +95,30 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* モバイル: 画面下部にシート状で表示 */
+@media (max-width: 900px) {
+  .comment-popup {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 12px 12px 0 0;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .comment-popup__input {
+    font-size: 16px; /* iOS自動ズーム防止 */
+  }
+
+  .comment-popup__actions {
+    gap: 12px;
+  }
+
+  .comment-popup__cancel,
+  .comment-popup__submit {
+    padding: 12px 20px;
+    font-size: 15px;
+    min-height: 44px; /* タッチターゲット最小サイズ */
+  }
+}

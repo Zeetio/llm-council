@@ -96,6 +96,7 @@ body {
 
 #root {
   height: 100vh;
+  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
   width: 100vw;
   overflow: hidden;
 }
