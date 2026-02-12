@@ -196,6 +196,63 @@ async def execute_web_search(query: str, tool_logger: ToolLogger = None) -> str:
         return error_msg
 
 
+async def search_images(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+    """
+    Tavily APIで関連画像を検索
+
+    Args:
+        query: 検索クエリ
+        max_results: 最大画像数
+
+    Returns:
+        画像URLのリスト [{"url": "...", "description": "..."}]
+    """
+    if not TAVILY_API_KEY:
+        logger.warning("Image search: TAVILY_API_KEY not set")
+        return []
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": TAVILY_API_KEY,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": max_results,
+                    "include_images": True,
+                    "include_image_descriptions": True,
+                },
+                timeout=15.0
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            images = []
+            # Tavily APIのレスポンスから画像を取得
+            raw_images = data.get("images", [])
+            for img in raw_images[:max_results]:
+                if isinstance(img, dict):
+                    url = img.get("url", "")
+                    desc = img.get("description", "")
+                elif isinstance(img, str):
+                    url = img
+                    desc = ""
+                else:
+                    continue
+
+                # 基本的なURLバリデーション
+                if url and url.startswith("http"):
+                    images.append({"url": url, "description": desc})
+
+            logger.info(f"Image search for '{query}': {len(images)} images found")
+            return images
+
+    except Exception as e:
+        logger.error(f"Image search failed: {e}")
+        return []
+
+
 async def execute_tool(
     name: str,
     arguments: Dict[str, Any],

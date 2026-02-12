@@ -6,7 +6,7 @@ from .openrouter import query_members_parallel, query_model, query_model_with_to
 from .config import get_council_members, get_chairman, get_config
 from .memory_extractor import build_memory_context
 from .llm_logger import LLMLogger
-from .tools import AVAILABLE_TOOLS, ToolLogger
+from .tools import AVAILABLE_TOOLS, ToolLogger, search_images
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +267,7 @@ async def stage3_synthesize_final(
     llm_logger: Optional[LLMLogger] = None
 ) -> Dict[str, Any]:
     """
-    Stage 3: Chairman synthesizes final response.
+    Stage 3: Chairman synthesizes final response + image search.
 
     Args:
         user_query: The original user query
@@ -275,8 +275,10 @@ async def stage3_synthesize_final(
         stage2_results: Rankings from Stage 2
 
     Returns:
-        Dict with 'id', 'name', 'model' and 'response' keys
+        Dict with 'id', 'name', 'model', 'response' and 'images' keys
     """
+    import asyncio
+
     # Get chairman config
     chairman = get_chairman(project_id)
 
@@ -309,23 +311,26 @@ Your task as Chairman is to synthesize all of this information into a single, co
 Provide a clear, well-reasoned final answer that represents the council's collective wisdom:"""
 
     messages = [{"role": "user", "content": chairman_prompt}]
-    logger.info(f"Stage 3: Chairman ({chairman['model']}) synthesizing")
+    logger.info(f"Stage 3: Chairman ({chairman['model']}) synthesizing + image search")
 
-    # Query the chairman model with its system prompt
-    response = await query_model(
+    # Chairman合成と画像検索を並行実行
+    chairman_task = query_model(
         chairman["model"],
         messages,
         system_prompt=chairman.get("system_prompt")
     )
+    image_task = search_images(user_query, max_results=5)
+
+    response, images = await asyncio.gather(chairman_task, image_task)
 
     if response is None:
         logger.error("Stage 3: Chairman failed to synthesize")
-        # Fallback if chairman fails
         return {
             "id": chairman["id"],
             "name": chairman.get("name", "Chairman"),
             "model": chairman["model"],
-            "response": "Error: Unable to generate final synthesis."
+            "response": "Error: Unable to generate final synthesis.",
+            "images": images or []
         }
 
     # LLM呼び出しをログに記録
@@ -338,12 +343,13 @@ Provide a clear, well-reasoned final answer that represents the council's collec
             response_time_ms=response.get('response_time_ms', 0)
         )
 
-    logger.info("Stage 3: Chairman synthesis complete")
+    logger.info(f"Stage 3: Chairman synthesis complete, {len(images)} images")
     return {
         "id": chairman["id"],
         "name": chairman.get("name", "Chairman"),
         "model": chairman["model"],
-        "response": response.get('content', '')
+        "response": response.get('content', ''),
+        "images": images or []
     }
 
 

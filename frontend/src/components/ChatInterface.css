@@ -55,6 +55,13 @@
   padding: 24px;
   position: relative;
   width: 100%;
+  /* スクロールバー非表示（スクロール自体は有効） */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.messages-container::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 
 .empty-state {
