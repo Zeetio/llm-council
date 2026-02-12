@@ -1,4 +1,18 @@
+import { useState, useEffect, useRef } from 'react';
+import Sidebar from './components/Sidebar';
+import ChatInterface from './components/ChatInterface';
+import Settings from './components/Settings';
+import PasswordDialog from './components/PasswordDialog';
+import {
+  api,
+  getProjectId as apiGetProjectId,
+  setProjectId as apiSetProjectId,
+  getActiveJob,
+  saveActiveJob,
+  clearActiveJob
+} from './api';
 import useNotification from './hooks/useNotification';
+import './App.css';
 
 function App() {
   const [conversations, setConversations] = useState([]);
@@ -519,7 +533,6 @@ function App() {
           stage1: false,
           stage2: false,
           stage3: false,
-          40: false,
         },
       };
 

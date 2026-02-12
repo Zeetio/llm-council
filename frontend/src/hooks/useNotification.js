@@ -1,11 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
 
 const useNotification = () => {
-  const [permission, setPermission] = useState(Notification.permission);
+  const [permission, setPermission] = useState(() => {
+    if (typeof Notification !== 'undefined') {
+      return Notification.permission;
+    }
+    return 'default';
+  });
   const audioContextRef = useRef(null);
 
   const requestPermission = useCallback(async () => {
-    if (!('Notification' in window)) {
+    if (typeof Notification === 'undefined') {
       console.log('This browser does not support desktop notification');
       return;
     }
@@ -61,7 +66,7 @@ const useNotification = () => {
               ...options
             });
           });
-        } else {
+        } else if (typeof Notification !== 'undefined') {
           // 通常のNotification API
           new Notification(title, {
             icon: '/pwa-192x192.png',
