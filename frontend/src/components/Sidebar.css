@@ -232,13 +232,11 @@
   background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
 }
 
-background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
-}
-
-/* PC画面でのサイドバー開閉制御 */
 @media (min-width: 901px) {
   .sidebar {
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+    /* 折りたたみ時に潰れないように固定 */
   }
 
   .sidebar:not(.sidebar--open) {
