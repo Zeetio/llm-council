@@ -9,6 +9,60 @@ let projectId = localStorage.getItem('project_id') || 'default';
 // 認証済みプロジェクトのパスワードを一時保存（セッション内）
 let projectPassword = null;
 
+// =========================================================================
+// アクティブジョブの永続化（モバイルバックグラウンド/ページリロード対策）
+// =========================================================================
+const ACTIVE_JOB_KEY = 'llm_council_active_job';
+
+/**
+ * アクティブジョブ情報をlocalStorageに保存
+ * モバイルでバックグラウンドに移行したりページがリロードされても
+ * ジョブの追跡を再開できるようにする
+ */
+export function saveActiveJob(jobId, conversationId, projectId) {
+  try {
+    localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify({
+      jobId,
+      conversationId,
+      projectId,
+      startedAt: Date.now(),
+    }));
+  } catch (e) {
+    console.warn('Failed to save active job to localStorage:', e);
+  }
+}
+
+/**
+ * アクティブジョブ情報をlocalStorageから取得
+ */
+export function getActiveJob() {
+  try {
+    const data = localStorage.getItem(ACTIVE_JOB_KEY);
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    // 10分以上前のジョブは無視（タイムアウト相当）
+    if (Date.now() - parsed.startedAt > 600000) {
+      clearActiveJob();
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.warn('Failed to read active job from localStorage:', e);
+    return null;
+  }
+}
+
+/**
+ * アクティブジョブ情報をクリア（完了/失敗時に呼ぶ）
+ */
+export function clearActiveJob() {
+  try {
+    localStorage.removeItem(ACTIVE_JOB_KEY);
+  } catch (e) {
+    console.warn('Failed to clear active job from localStorage:', e);
+  }
+}
+
 export function setProjectId(id, options = {}) {
   projectId = id || 'default';
   localStorage.setItem('project_id', projectId);
@@ -611,6 +665,8 @@ export const api = {
 
   /**
    * ジョブの完了をポーリング
+   * モバイルバックグラウンド対策: visibilitychangeで即座にポーリング再開
+   *
    * @param {string} jobId - ジョブID
    * @param {function} onUpdate - 更新時のコールバック (jobData) => void
    * @param {Object} options - オプション { interval: ポーリング間隔(ms), timeout: タイムアウト(ms) }
@@ -621,32 +677,72 @@ export const api = {
     const timeout = options.timeout || 300000; // デフォルト5分
     const startTime = Date.now();
 
-    while (true) {
-      // タイムアウトチェック
-      if (Date.now() - startTime > timeout) {
-        throw new Error('Job polling timeout');
-      }
+    return new Promise((resolve, reject) => {
+      let timeoutId = null;
+      let stopped = false;
 
-      try {
-        const jobData = await this.getJobStatus(jobId);
+      // フォアグラウンド復帰時に即座にポーリングを再開するリスナー
+      const handleVisibilityChange = () => {
+        if (!document.hidden && !stopped) {
+          // バックグラウンドから復帰: 待機中のタイマーをキャンセルして即座にポーリング
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          doPoll();
+        }
+      };
 
-        // 更新コールバック
-        if (onUpdate) {
-          onUpdate(jobData);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      const cleanup = () => {
+        stopped = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+
+      const doPoll = async () => {
+        if (stopped) return;
+
+        // タイムアウトチェック
+        if (Date.now() - startTime > timeout) {
+          cleanup();
+          reject(new Error('Job polling timeout'));
+          return;
         }
 
-        // 完了または失敗したら終了
-        if (jobData.status === 'completed' || jobData.status === 'failed') {
-          return jobData;
-        }
+        try {
+          const jobData = await this.getJobStatus(jobId);
 
-        // 次のポーリングまで待機
-        await new Promise((resolve) => setTimeout(resolve, interval));
-      } catch (error) {
-        // エラー時は少し待ってリトライ
-        console.error('Polling error:', error);
-        await new Promise((resolve) => setTimeout(resolve, interval * 2));
-      }
-    }
+          if (onUpdate) {
+            onUpdate(jobData);
+          }
+
+          // 完了または失敗したら終了
+          if (jobData.status === 'completed' || jobData.status === 'failed') {
+            cleanup();
+            resolve(jobData);
+            return;
+          }
+
+          // 次のポーリングをスケジュール
+          if (!stopped) {
+            timeoutId = setTimeout(doPoll, interval);
+          }
+        } catch (error) {
+          console.error('Polling error:', error);
+          // エラー時は少し待ってリトライ
+          if (!stopped) {
+            timeoutId = setTimeout(doPoll, interval * 2);
+          }
+        }
+      };
+
+      // 即座に最初のポーリングを開始
+      doPoll();
+    });
   },
 };

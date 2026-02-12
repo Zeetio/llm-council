@@ -28,16 +28,45 @@ const MessageItem = memo(function MessageItem({ msg }) {
     );
   }
 
+  // いずれかのステージが処理中かどうか
+  const isProcessing = msg.loading?.stage1 || msg.loading?.stage2 || msg.loading?.stage3;
+
   return (
     <div className="message-group">
       <div className="assistant-message">
         <div className="message-label">LLM Council</div>
 
+        {/* 3段階プログレスステッパー: 処理の全体像を視覚的に表示 */}
+        {isProcessing && (
+          <div className="progress-stepper" role="progressbar"
+               aria-valuenow={msg.stage3 ? 3 : msg.stage2 ? 2 : msg.stage1 ? 1 : 0}
+               aria-valuemin={0} aria-valuemax={3}>
+            {[
+              { key: 'stage1', label: '回答収集', done: !!msg.stage1, active: !!msg.loading?.stage1 },
+              { key: 'stage2', label: 'ランキング', done: !!msg.stage2, active: !!msg.loading?.stage2 },
+              { key: 'stage3', label: '統合回答', done: !!msg.stage3, active: !!msg.loading?.stage3 },
+            ].map((step, i) => (
+              <div key={step.key} className={`progress-step ${step.done ? 'progress-step--done' : ''} ${step.active ? 'progress-step--active' : ''}`}>
+                <div className="progress-step__indicator">
+                  {step.done ? '✓' : i + 1}
+                </div>
+                <span className="progress-step__label">{step.label}</span>
+                {i < 2 && <div className={`progress-step__connector ${step.done ? 'progress-step__connector--done' : ''}`} />}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Stage 1 */}
         {msg.loading?.stage1 && (
           <div className="stage-loading">
-            <div className="spinner"></div>
-            <span>Running Stage 1: Collecting individual responses...</span>
+            <div className="stage-loading__status">
+              <div className="spinner"></div>
+              <span>Stage 1: 各モデルの回答を収集中...</span>
+            </div>
+            <div className="skeleton-lines">
+              <div className="skeleton-line" /><div className="skeleton-line" /><div className="skeleton-line" />
+            </div>
           </div>
         )}
         {msg.stage1 && <Stage1 responses={msg.stage1} />}
@@ -45,8 +74,13 @@ const MessageItem = memo(function MessageItem({ msg }) {
         {/* Stage 2 */}
         {msg.loading?.stage2 && (
           <div className="stage-loading">
-            <div className="spinner"></div>
-            <span>Running Stage 2: Peer rankings...</span>
+            <div className="stage-loading__status">
+              <div className="spinner"></div>
+              <span>Stage 2: 回答を相互評価中...</span>
+            </div>
+            <div className="skeleton-lines">
+              <div className="skeleton-line" /><div className="skeleton-line" />
+            </div>
           </div>
         )}
         {msg.stage2 && (
@@ -61,8 +95,13 @@ const MessageItem = memo(function MessageItem({ msg }) {
         {/* Stage 3 */}
         {msg.loading?.stage3 && (
           <div className="stage-loading">
-            <div className="spinner"></div>
-            <span>Running Stage 3: Final synthesis...</span>
+            <div className="stage-loading__status">
+              <div className="spinner"></div>
+              <span>Stage 3: 最終回答を統合中...</span>
+            </div>
+            <div className="skeleton-lines">
+              <div className="skeleton-line" /><div className="skeleton-line" /><div className="skeleton-line" />
+            </div>
           </div>
         )}
         {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
@@ -98,13 +137,34 @@ export default function ChatInterface({
   // 選択中のコンテキスト情報
   const [selectionContext, setSelectionContext] = useState(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // スクロール位置の追跡
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const scrollToBottom = (force = false) => {
+    if (!messagesContainerRef.current) return;
+    const el = messagesContainerRef.current;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    // ユーザーが下部付近にいる場合、または強制の場合のみスクロール
+    if (isNearBottom || force) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [conversation]);
+
+  // スクロール位置を監視して「最下部へ」ボタンの表示を制御
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      setShowScrollButton(!isNearBottom && el.scrollHeight > el.clientHeight + 200);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files);
@@ -236,6 +296,18 @@ export default function ChatInterface({
         )}
 
         <div ref={messagesEndRef} />
+
+        {/* 最下部へスクロールするフローティングボタン */}
+        {showScrollButton && (
+          <button
+            type="button"
+            className="scroll-to-bottom"
+            onClick={() => scrollToBottom(true)}
+            aria-label="最新のメッセージにスクロール"
+          >
+            ↓
+          </button>
+        )}
       </div>
 
       {hasConversation && (
@@ -293,12 +365,20 @@ export default function ChatInterface({
               )}
               <textarea
                 className="message-input"
-                placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
+                placeholder={isMobile
+                  ? "質問を入力..."
+                  : "Ask your question... (Shift+Enter for new line, Enter to send)"}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // テキストエリア自動リサイズ
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+                }}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                rows={3}
+                rows={isMobile ? 1 : 3}
               />
             </div>
             <div className="input-actions">

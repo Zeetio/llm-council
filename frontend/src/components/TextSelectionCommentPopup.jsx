@@ -25,9 +25,23 @@ export default function TextSelectionCommentPopup({
     left: anchorRect?.left ?? 0,
   });
 
+  // モバイル判定
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 900;
+
   // ビューポート内に収まるように位置を調整
   useLayoutEffect(() => {
     if (!anchorRect) return;
+
+    // モバイルでは画面下部に固定表示
+    if (isMobile) {
+      setPopupStyle({
+        bottom: 0,
+        left: 0,
+        right: 0,
+        top: 'auto',
+      });
+      return;
+    }
 
     const popup = popupRef.current;
     const margin = 8;
@@ -55,7 +69,7 @@ export default function TextSelectionCommentPopup({
     }
 
     setPopupStyle((prev) => (prev.top === top && prev.left === left ? prev : { top, left }));
-  }, [anchorRect]);
+  }, [anchorRect, isMobile]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -103,9 +117,11 @@ export default function TextSelectionCommentPopup({
           rows={3}
         />
 
-        <div className="comment-popup__hint">
-          Ctrl+Enter で送信 / Esc でキャンセル
-        </div>
+        {!isMobile && (
+          <div className="comment-popup__hint">
+            Ctrl+Enter で送信 / Esc でキャンセル
+          </div>
+        )}
 
         <div className="comment-popup__actions">
           <button

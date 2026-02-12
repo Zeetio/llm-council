@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
 import PasswordDialog from './components/PasswordDialog';
-import { api, setProjectId as apiSetProjectId, getProjectId as apiGetProjectId } from './api';
+import { api, setProjectId as apiSetProjectId, getProjectId as apiGetProjectId, saveActiveJob, getActiveJob, clearActiveJob } from './api';
 import './App.css';
 
 function App() {
@@ -78,20 +78,13 @@ function App() {
     return () => window.removeEventListener('resize', updateLayout);
   }, []);
 
-  // Page Visibility API: バックグラウンド・フォアグラウンド切り替えの監視
+  // Page Visibility API: フォアグラウンド復帰時に会話リストを最新化
+  // （ポーリングの即時再開はpollJob内部のvisibilitychangeリスナーが担当）
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log('Page moved to background');
-        // バックグラウンドに移行時の処理（ポーリングは継続）
-      } else {
-        console.log('Page returned to foreground');
-        // フォアグラウンドに復帰時の処理
-        // 進行中のジョブがあれば会話をリロード（最新の進捗を取得）
-        if (isLoading && currentConversationId) {
-          console.log('Reloading conversation on foreground return');
-          loadConversation(currentConversationId);
-        }
+      if (!document.hidden) {
+        // フォアグラウンドに復帰時、会話リストを最新化
+        loadConversations();
       }
     };
 
@@ -100,7 +93,7 @@ function App() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isLoading, currentConversationId]);
+  }, []);
 
   const loadProjects = async () => {
     try {
@@ -151,6 +144,10 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+    // モバイルでは会話選択時にサイドバーを自動的に閉じる
+    if (isMobile) {
+      setIsSidebarOpen(false);
+    }
   };
 
   // プロジェクト切り替え完了処理
@@ -294,6 +291,202 @@ function App() {
     }
   };
 
+  /**
+   * ジョブのポーリングとUI更新を行う共通処理
+   * 新規送信とページリロード後の復元の両方で使用
+   */
+  const pollJobAndUpdateUI = async (jobId) => {
+    // 前回のステージを記憶（重複更新を防ぐ）
+    let lastStage = null;
+
+    await api.pollJob(
+      jobId,
+      (jobData) => {
+        const { progress, status } = jobData;
+
+        // ステージ1の更新
+        if (progress?.stage1?.status === 'running' && lastStage !== 'stage1-running') {
+          lastStage = 'stage1-running';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              loading: { ...messages[lastIdx].loading, stage1: true },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        if (progress?.stage1?.status === 'completed' && progress?.stage1?.data && lastStage !== 'stage1-completed') {
+          lastStage = 'stage1-completed';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              stage1: progress.stage1.data,
+              loading: { ...messages[lastIdx].loading, stage1: false },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        // ステージ2の更新
+        if (progress?.stage2?.status === 'running' && lastStage !== 'stage2-running') {
+          lastStage = 'stage2-running';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              loading: { ...messages[lastIdx].loading, stage2: true },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        if (progress?.stage2?.status === 'completed' && progress?.stage2?.data && lastStage !== 'stage2-completed') {
+          lastStage = 'stage2-completed';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              stage2: progress.stage2.data,
+              metadata: progress.stage2.metadata,
+              loading: { ...messages[lastIdx].loading, stage2: false },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        // ステージ3の更新
+        if (progress?.stage3?.status === 'running' && lastStage !== 'stage3-running') {
+          lastStage = 'stage3-running';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              loading: { ...messages[lastIdx].loading, stage3: true },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        if (progress?.stage3?.status === 'completed' && progress?.stage3?.data && lastStage !== 'stage3-completed') {
+          lastStage = 'stage3-completed';
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              stage3: progress.stage3.data,
+              loading: { ...messages[lastIdx].loading, stage3: false },
+            };
+            return { ...prev, messages };
+          });
+        }
+
+        // 完了時の処理
+        if (status === 'completed' && jobData.usage) {
+          setCurrentConversation((prev) => {
+            if (!prev) return prev;
+            const messages = [...prev.messages];
+            const lastIdx = messages.length - 1;
+            if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              usage: jobData.usage,
+            };
+            return { ...prev, messages };
+          });
+        }
+      },
+      { interval: 1000, timeout: 300000 }
+    );
+  };
+
+  // ページロード時にアクティブジョブがあれば復元する
+  useEffect(() => {
+    const resumeActiveJob = async () => {
+      const activeJob = getActiveJob();
+      if (!activeJob) return;
+
+      const { jobId, conversationId, projectId: jobProjectId } = activeJob;
+
+      // 現在のプロジェクトと一致しない場合はスキップ
+      if (jobProjectId !== projectId) return;
+
+      console.log('Resuming active job:', jobId);
+
+      try {
+        // ジョブの現在の状態を確認
+        const jobData = await api.getJobStatus(jobId);
+
+        if (jobData.status === 'completed' || jobData.status === 'failed') {
+          // 既に完了/失敗している場合はクリアして会話をリロード
+          clearActiveJob();
+          setCurrentConversationId(conversationId);
+          return;
+        }
+
+        // まだ実行中 → 会話を読み込んでポーリングを再開
+        setCurrentConversationId(conversationId);
+        setIsLoading(true);
+
+        // 会話データを読み込み（サーバー側で保存済みのメッセージを反映）
+        const conv = await api.getConversation(conversationId);
+        setCurrentConversation(conv);
+
+        // 最後のメッセージにloading状態を追加
+        setCurrentConversation((prev) => {
+          if (!prev) return prev;
+          const messages = [...prev.messages];
+          const lastIdx = messages.length - 1;
+          if (lastIdx >= 0 && messages[lastIdx].role === 'assistant') {
+            messages[lastIdx] = {
+              ...messages[lastIdx],
+              loading: {
+                stage1: jobData.progress?.stage1?.status === 'running',
+                stage2: jobData.progress?.stage2?.status === 'running',
+                stage3: jobData.progress?.stage3?.status === 'running',
+              },
+            };
+            return { ...prev, messages };
+          }
+          return prev;
+        });
+
+        // ポーリングを再開
+        await pollJobAndUpdateUI(jobId);
+
+        clearActiveJob();
+        loadConversations();
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Failed to resume active job:', error);
+        clearActiveJob();
+        setIsLoading(false);
+      }
+    };
+
+    resumeActiveJob();
+  }, []); // マウント時に1回のみ実行
+
   // ジョブベースのメッセージ送信（バックグラウンド実行対応）
   const handleSendMessage = async (content) => {
     if (!currentConversationId) return;
@@ -341,122 +534,19 @@ function App() {
       const jobId = jobResponse.job_id;
       console.log('Job created:', jobId);
 
-      // 前回のステージを記憶（重複更新を防ぐ）
-      let lastStage = null;
+      // ジョブ情報をlocalStorageに保存（モバイルバックグラウンド/リロード対策）
+      saveActiveJob(jobId, currentConversationId, projectId);
 
       // ジョブをポーリング
-      await api.pollJob(
-        jobId,
-        (jobData) => {
-          const { progress, status } = jobData;
-          const currentStage = progress?.current_stage;
+      await pollJobAndUpdateUI(jobId);
 
-          // ステージ1の更新
-          if (progress?.stage1?.status === 'running' && lastStage !== 'stage1-running') {
-            lastStage = 'stage1-running';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                loading: { ...messages[lastIdx].loading, stage1: true },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          if (progress?.stage1?.status === 'completed' && progress?.stage1?.data && lastStage !== 'stage1-completed') {
-            lastStage = 'stage1-completed';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                stage1: progress.stage1.data,
-                loading: { ...messages[lastIdx].loading, stage1: false },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          // ステージ2の更新
-          if (progress?.stage2?.status === 'running' && lastStage !== 'stage2-running') {
-            lastStage = 'stage2-running';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                loading: { ...messages[lastIdx].loading, stage2: true },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          if (progress?.stage2?.status === 'completed' && progress?.stage2?.data && lastStage !== 'stage2-completed') {
-            lastStage = 'stage2-completed';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                stage2: progress.stage2.data,
-                metadata: progress.stage2.metadata,
-                loading: { ...messages[lastIdx].loading, stage2: false },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          // ステージ3の更新
-          if (progress?.stage3?.status === 'running' && lastStage !== 'stage3-running') {
-            lastStage = 'stage3-running';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                loading: { ...messages[lastIdx].loading, stage3: true },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          if (progress?.stage3?.status === 'completed' && progress?.stage3?.data && lastStage !== 'stage3-completed') {
-            lastStage = 'stage3-completed';
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                stage3: progress.stage3.data,
-                loading: { ...messages[lastIdx].loading, stage3: false },
-              };
-              return { ...prev, messages };
-            });
-          }
-
-          // 完了時の処理
-          if (status === 'completed' && jobData.usage) {
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastIdx = messages.length - 1;
-              messages[lastIdx] = {
-                ...messages[lastIdx],
-                usage: jobData.usage,
-              };
-              return { ...prev, messages };
-            });
-          }
-        },
-        { interval: 1000, timeout: 300000 }
-      );
-
-      // ポーリング完了後、会話リストを再読み込み
+      // 完了 - ジョブ情報をクリア
+      clearActiveJob();
       loadConversations();
       setIsLoading(false);
     } catch (error) {
       console.error('Failed to send message:', error);
+      clearActiveJob();
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,

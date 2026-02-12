@@ -63,3 +63,34 @@
   color: var(--text-primary);
   line-height: 1.6;
 }
+
+/* モバイル: タブを横スクロール対応 */
+@media (max-width: 900px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    padding-bottom: 4px;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .tab {
+    flex-shrink: 0;
+    min-height: 44px; /* タッチターゲット最小サイズ */
+    display: flex;
+    align-items: center;
+  }
+
+  .stage {
+    padding: 16px 12px;
+    margin: 16px 0;
+  }
+
+  .tab-content {
+    padding: 12px;
+  }
+}

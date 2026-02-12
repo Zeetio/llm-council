@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -17,8 +18,45 @@ export default function Sidebar({
   isOpen = true,
   onClose,
 }) {
+  // スワイプクローズ用のタッチ状態
+  const touchStartRef = useRef(null);
+  const sidebarRef = useRef(null);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    if (!touchStartRef.current) return;
+
+    const touchEnd = {
+      x: e.changedTouches[0].clientX,
+      y: e.changedTouches[0].clientY,
+    };
+
+    const dx = touchEnd.x - touchStartRef.current.x;
+    const dy = Math.abs(touchEnd.y - touchStartRef.current.y);
+    const elapsed = Date.now() - touchStartRef.current.time;
+
+    // 左方向スワイプ（dx < -60px）かつ縦方向の移動が少なく、素早い操作
+    if (dx < -60 && dy < 100 && elapsed < 400) {
+      onClose?.();
+    }
+
+    touchStartRef.current = null;
+  }, [onClose]);
+
   return (
-    <div className={`sidebar ${isMobile ? 'sidebar--mobile' : ''} ${isOpen ? 'sidebar--open' : ''}`}>
+    <div
+      ref={sidebarRef}
+      className={`sidebar ${isMobile ? 'sidebar--mobile' : ''} ${isOpen ? 'sidebar--open' : ''}`}
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+    >
       <div className="sidebar-header">
         <div className="header-top">
           <h1>James Council</h1>

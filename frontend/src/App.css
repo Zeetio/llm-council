@@ -5,6 +5,7 @@
 .app {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
   width: 100vw;
   overflow: hidden;
   background: var(--bg-primary);
@@ -24,6 +25,13 @@
   padding: 0;
   margin: 0;
   z-index: 15;
+  /* フェードイン/アウトアニメーション */
+  animation: overlay-fade-in 0.2s ease;
+}
+
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 900px) {
