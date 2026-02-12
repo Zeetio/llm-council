@@ -143,7 +143,9 @@ function App() {
   const loadConversations = async () => {
     try {
       const convs = await api.listConversations();
-      setConversations(convs);
+      // 最新の順にソート (created_at 降順)
+      const sortedConvs = convs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setConversations(sortedConvs);
     } catch (error) {
       console.error('Failed to load conversations:', error);
     }
@@ -466,7 +468,13 @@ function App() {
 
             messages[lastIdx] = {
               ...messages[lastIdx],
+              // jobDataに最終的な結果が含まれている場合は更新
+              stage1: jobData.progress?.stage1?.data || messages[lastIdx].stage1,
+              stage2: jobData.progress?.stage2?.data || messages[lastIdx].stage2,
+              stage3: jobData.progress?.stage3?.data || messages[lastIdx].stage3,
+              metadata: jobData.progress?.stage2?.metadata || messages[lastIdx].metadata,
               usage: usageData,
+              loading: { stage1: false, stage2: false, stage3: false }
             };
             return { ...prev, messages };
           });
