@@ -135,7 +135,7 @@ async def execute_web_search(query: str, tool_logger: ToolLogger = None) -> str:
                     "api_key": TAVILY_API_KEY,
                     "query": query,
                     "search_depth": "basic",  # basic or advanced
-                    "max_results": 5,
+                    "max_results": 10,
                     "include_answer": True,  # AIサマリーを含める
                 },
                 timeout=30.0
@@ -196,7 +196,7 @@ async def execute_web_search(query: str, tool_logger: ToolLogger = None) -> str:
         return error_msg
 
 
-async def search_images(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+async def search_images(query: str, max_results: int = 8) -> List[Dict[str, str]]:
     """
     Tavily APIで関連画像を検索
 

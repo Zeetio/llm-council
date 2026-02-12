@@ -39,8 +39,8 @@ const MessageItem = memo(function MessageItem({ msg }) {
         {/* 3段階プログレスステッパー: 処理の全体像を視覚的に表示 */}
         {isProcessing && (
           <div className="progress-stepper" role="progressbar"
-               aria-valuenow={msg.stage3 ? 3 : msg.stage2 ? 2 : msg.stage1 ? 1 : 0}
-               aria-valuemin={0} aria-valuemax={3}>
+            aria-valuenow={msg.stage3 ? 3 : msg.stage2 ? 2 : msg.stage1 ? 1 : 0}
+            aria-valuemin={0} aria-valuemax={3}>
             {[
               { key: 'stage1', label: '回答収集', done: !!msg.stage1, active: !!msg.loading?.stage1 },
               { key: 'stage2', label: 'ランキング', done: !!msg.stage2, active: !!msg.loading?.stage2 },
@@ -378,7 +378,7 @@ export default function ChatInterface({
                 }}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
-                rows={isMobile ? 1 : 3}
+                rows={1}
               />
             </div>
             <div className="input-actions">

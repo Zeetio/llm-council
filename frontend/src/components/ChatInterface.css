@@ -3,10 +3,13 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
+  height: 100dvh;
+  /* モバイルブラウザのアドレスバー分を動的に考慮 */
   background: var(--bg-primary);
   min-width: 0;
   width: 100%;
+  overflow-x: hidden;
+  /* 横スクロール防止 */
 }
 
 .chat-header {
@@ -52,16 +55,21 @@
 .messages-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  /* 横スクロール防止 */
   padding: 24px;
   position: relative;
   width: 100%;
   /* スクロールバー非表示（スクロール自体は有効） */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
 }
 
 .messages-container::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Opera */
+  display: none;
+  /* Chrome/Safari/Opera */
 }
 
 .empty-state {
@@ -200,8 +208,15 @@
 }
 
 @keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(74, 144, 226, 0); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(74, 144, 226, 0);
+  }
 }
 
 /* === スケルトンローディング === */
@@ -239,13 +254,26 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
-.skeleton-line:nth-child(1) { width: 90%; }
-.skeleton-line:nth-child(2) { width: 75%; }
-.skeleton-line:nth-child(3) { width: 60%; }
+.skeleton-line:nth-child(1) {
+  width: 90%;
+}
+
+.skeleton-line:nth-child(2) {
+  width: 75%;
+}
+
+.skeleton-line:nth-child(3) {
+  width: 60%;
+}
 
 @keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* === 最下部へスクロールボタン === */
@@ -376,18 +404,19 @@
 
 .message-input {
   flex: 1;
-  padding: 14px;
+  padding: 10px 14px;
   background: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 16px; /* 16px未満だとiOSで自動ズームが発生する */
+  font-size: 16px;
+  /* 16px未満だとiOSで自動ズームが発生する */
   font-family: inherit;
-  line-height: 1.5;
+  line-height: 1.4;
   outline: none;
-  resize: vertical;
-  min-height: 80px;
-  max-height: 300px;
+  resize: none;
+  min-height: 44px;
+  max-height: 200px;
 }
 
 .message-input:focus {
@@ -552,14 +581,16 @@
 
   .attach-button {
     padding: 10px 12px;
-    min-height: 44px; /* タッチターゲット最小サイズ */
+    min-height: 44px;
+    /* タッチターゲット最小サイズ */
   }
 
   .send-button,
   .stop-button {
     padding: 12px 18px;
     font-size: 14px;
-    min-height: 44px; /* タッチターゲット最小サイズ */
+    min-height: 44px;
+    /* タッチターゲット最小サイズ */
   }
 
   .user-message .message-content {
@@ -573,7 +604,8 @@
 
   /* モバイルではtextareaの最小高さを縮小してスペースを節約 */
   .message-input {
-    min-height: 60px;
+    min-height: 40px;
+    padding: 8px 12px;
   }
 
   /* プログレスステッパーのモバイル最適化 */

@@ -87,7 +87,7 @@ async def query_model_with_tools(
     tool_choice: str = "auto",
     system_prompt: Optional[str] = None,
     timeout: float = 120.0,
-    max_tool_iterations: int = 3,
+    max_tool_iterations: int = 5,
     tool_logger=None
 ) -> Optional[Dict[str, Any]]:
     """
@@ -207,19 +207,53 @@ async def query_model_with_tools(
             logger.error(f"Error in tool loop for model {model}: {e}")
             return None
 
-    # 最大イテレーション到達
-    response_time_ms = int((time.time() - start_time) * 1000)
-    logger.warning(f"Maximum tool iterations ({max_tool_iterations}) reached for {model}")
+    # 最大イテレーション到達 → ツールなしで最終回答を強制取得
+    logger.warning(f"Maximum tool iterations ({max_tool_iterations}) reached for {model}, forcing final answer")
 
-    return {
-        'content': "Error: Maximum tool iterations reached. Please try a simpler query.",
-        'reasoning_details': None,
-        'usage': total_usage,
-        'model': model,
-        'response_time_ms': response_time_ms,
-        'tool_used': len(tools_used) > 0,
-        'tools_used': tools_used,
-    }
+    try:
+        # ツールを外して最終回答を強制
+        payload = {
+            "model": model,
+            "messages": final_messages,
+        }
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                OPENROUTER_API_URL,
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        message = data['choices'][0]['message']
+        usage = data.get('usage', {})
+        total_usage['prompt_tokens'] += usage.get('prompt_tokens', 0)
+        total_usage['completion_tokens'] += usage.get('completion_tokens', 0)
+        total_usage['total_tokens'] += usage.get('total_tokens', 0)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        return {
+            'content': message.get('content', ''),
+            'reasoning_details': message.get('reasoning_details'),
+            'usage': total_usage,
+            'model': model,
+            'response_time_ms': response_time_ms,
+            'tool_used': len(tools_used) > 0,
+            'tools_used': tools_used,
+        }
+    except Exception as e:
+        logger.error(f"Fallback (no-tool) call failed for {model}: {e}")
+        response_time_ms = int((time.time() - start_time) * 1000)
+        return {
+            'content': "Error: Failed to generate response after tool calls.",
+            'reasoning_details': None,
+            'usage': total_usage,
+            'model': model,
+            'response_time_ms': response_time_ms,
+            'tool_used': len(tools_used) > 0,
+            'tools_used': tools_used,
+        }
 
 
 async def query_models_parallel(
