@@ -159,8 +159,8 @@ export default function ChatInterface({
     const el = messagesContainerRef.current;
     if (!el) return;
     const handleScroll = () => {
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-      setShowScrollButton(!isNearBottom && el.scrollHeight > el.clientHeight + 50);
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+      setShowScrollButton(!isNearBottom && el.scrollHeight > el.clientHeight);
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
@@ -296,19 +296,19 @@ export default function ChatInterface({
         )}
 
         <div ref={messagesEndRef} />
-
-        {/* 最下部へスクロールするフローティングボタン */}
-        {showScrollButton && (
-          <button
-            type="button"
-            className="scroll-to-bottom"
-            onClick={() => scrollToBottom(true)}
-            aria-label="最新のメッセージにスクロール"
-          >
-            ↓
-          </button>
-        )}
       </div>
+
+      {/* 最下部へスクロールするフローティングボタン */}
+      {showScrollButton && (
+        <button
+          type="button"
+          className="scroll-to-bottom"
+          onClick={() => scrollToBottom(true)}
+          aria-label="最新のメッセージにスクロール"
+        >
+          ↓
+        </button>
+      )}
 
       {hasConversation && (
         <>

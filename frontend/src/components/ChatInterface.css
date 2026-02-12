@@ -10,6 +10,7 @@
   width: 100%;
   overflow-x: hidden;
   /* 横スクロール防止 */
+  position: relative;
 }
 
 .chat-header {
@@ -277,24 +278,26 @@
 }
 
 /* === 最下部へスクロールボタン === */
+/* === 最下部へスクロールボタン === */
 .scroll-to-bottom {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  width: 44px;
-  height: 44px;
+  bottom: 120px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  color: var(--text-secondary);
-  font-size: 20px;
+  background: var(--accent-blue);
+  border: none;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  color: #fff;
+  font-size: 24px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 5;
-  transition: background 0.2s, transform 0.2s;
+  z-index: 100;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.9;
 }
 
 .scroll-to-bottom:hover {
