@@ -238,7 +238,7 @@ deploy: docker-push ## Cloud Runにデプロイ（常にキャッシュなしビ
 		--image $(AR_IMAGE):$(DOCKER_TAG) \
 		--region $(GCP_REGION) \
 		--platform managed \
-		--no-allow-unauthenticated \
+		--allow-unauthenticated \
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--memory 4Gi \
 		--cpu 1 \
@@ -255,7 +255,7 @@ deploy-with-gcs: docker-push ## Cloud Runにデプロイ（GCSバケット指定
 		--image $(AR_IMAGE):$(DOCKER_TAG) \
 		--region $(GCP_REGION) \
 		--platform managed \
-		--no-allow-unauthenticated \
+		--allow-unauthenticated \
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
 		--set-env-vars="STORAGE_BACKEND=gcs,GCS_BUCKET=$$bucket" \
 		--memory 8Gi \
