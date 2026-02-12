@@ -1,10 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import Sidebar from './components/Sidebar';
-import ChatInterface from './components/ChatInterface';
-import Settings from './components/Settings';
-import PasswordDialog from './components/PasswordDialog';
-import { api, setProjectId as apiSetProjectId, getProjectId as apiGetProjectId, saveActiveJob, getActiveJob, clearActiveJob } from './api';
-import './App.css';
+import useNotification from './hooks/useNotification';
 
 function App() {
   const [conversations, setConversations] = useState([]);
@@ -18,6 +12,9 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const lastIsMobileRef = useRef(null);
   const preservePasswordRef = useRef(false);
+
+  // Notification hook
+  const { sendNotification, requestPermission, permission } = useNotification();
 
   // パスワードダイアログ関連の状態
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
@@ -414,6 +411,12 @@ function App() {
             };
             return { ...prev, messages };
           });
+
+          // 通知を送信
+          sendNotification('LLM Council: 生成が完了しました', {
+            body: 'すべてのステージの処理が終了しました。クリックして結果を確認してください。',
+            tag: jobId // 同じジョブの通知は上書き
+          });
         }
       },
       { interval: 1000, timeout: 300000 }
@@ -491,6 +494,11 @@ function App() {
   const handleSendMessage = async (content) => {
     if (!currentConversationId) return;
 
+    // 通知許可をリクエスト（ユーザーアクション内なので許可されやすい）
+    if (permission === 'default') {
+      requestPermission();
+    }
+
     setIsLoading(true);
     try {
       // Optimistically add user message to UI
@@ -511,6 +519,7 @@ function App() {
           stage1: false,
           stage2: false,
           stage3: false,
+          40: false,
         },
       };
 
@@ -595,7 +604,13 @@ function App() {
         isMobile={isMobile}
         isSidebarOpen={isSidebarOpen}
       />
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          requestNotificationPermission={requestPermission}
+          notificationPermission={permission}
+        />
+      )}
       {showPasswordDialog && pendingProjectId && (
         <PasswordDialog
           projectId={pendingProjectId}

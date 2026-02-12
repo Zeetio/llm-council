@@ -13,7 +13,7 @@ const CATEGORY_LABELS = {
   context: '現在の文脈',
 };
 
-export default function Settings({ onClose }) {
+export default function Settings({ onClose, requestNotificationPermission, notificationPermission }) {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -510,6 +510,30 @@ export default function Settings({ onClose }) {
                   />
                   <span>自動（システム設定）</span>
                 </label>
+              </div>
+            </div>
+          </section>
+
+          {/* 通知設定セクション */}
+          <section className="settings-section">
+            <h3>Notifications</h3>
+            <p className="section-description">
+              生成完了時に通知とサウンドでお知らせします
+            </p>
+            <div className="notification-card">
+              <div className="form-group">
+                <label>現在のステータス: <strong>{notificationPermission === 'granted' ? '許可済み' : notificationPermission === 'denied' ? 'ブロック中' : '未設定'}</strong></label>
+                {notificationPermission === 'default' && (
+                  <button className="add-btn" onClick={requestNotificationPermission}>
+                    通知を許可する
+                  </button>
+                )}
+                {notificationPermission === 'denied' && (
+                  <p className="error-text">ブラウザの設定で通知を許可してください。</p>
+                )}
+                {notificationPermission === 'granted' && (
+                  <p className="success-text">生成完了時に通知が送信されます。</p>
+                )}
               </div>
             </div>
           </section>
