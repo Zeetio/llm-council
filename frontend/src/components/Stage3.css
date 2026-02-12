@@ -23,3 +23,30 @@
   line-height: 1.7;
   font-size: 15px;
 }
+
+/* Stage3を視覚的に強調（最終回答であることを明確化） */
+.stage3 .stage-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stage3 .final-response {
+  border-width: 2px;
+  box-shadow: 0 2px 8px rgba(45, 138, 45, 0.08);
+}
+
+@media (max-width: 900px) {
+  .stage3 {
+    padding: 16px 12px;
+  }
+
+  .final-response {
+    padding: 16px 12px;
+  }
+
+  .final-text {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}

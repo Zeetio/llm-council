@@ -151,3 +151,42 @@
   color: var(--text-tertiary);
   font-size: 12px;
 }
+
+/* モバイル: タブを横スクロール対応 + レイアウト調整 */
+@media (max-width: 900px) {
+  .stage2 .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+
+  .stage2 .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stage2 .tab {
+    flex-shrink: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .stage2 .tab-content {
+    padding: 12px;
+  }
+
+  .aggregate-rankings {
+    padding: 12px;
+  }
+
+  .aggregate-item {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .rank-model {
+    font-size: 12px;
+  }
+}

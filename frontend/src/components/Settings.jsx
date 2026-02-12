@@ -47,6 +47,14 @@ export default function Settings({ onClose }) {
     try {
       setLoading(true);
       const cfg = await api.getConfig();
+      // 各メンバーに安定したReact key用の識別子を付与
+      // （IDフィールド編集時にkeyが変わってフォーカスが失われるのを防ぐ）
+      if (cfg.council_members) {
+        cfg.council_members = cfg.council_members.map((m, i) => ({
+          ...m,
+          _stableKey: m._stableKey || `loaded-${i}-${Date.now()}`,
+        }));
+      }
       setConfig(cfg);
       setError(null);
     } catch (err) {
@@ -80,7 +88,12 @@ export default function Settings({ onClose }) {
   const saveConfig = async () => {
     try {
       setSaving(true);
-      await api.updateConfig(config);
+      // _stableKey はフロントエンド専用なので送信前に除去
+      const configToSave = {
+        ...config,
+        council_members: config.council_members.map(({ _stableKey, ...rest }) => rest),
+      };
+      await api.updateConfig(configToSave);
       setError(null);
       onClose();
     } catch (err) {
@@ -102,6 +115,8 @@ export default function Settings({ onClose }) {
           name: 'New Agent',
           model: 'openai/gpt-4o',
           system_prompt: null,
+          // React key用の安定識別子（IDフィールド編集時にkeyが変わるのを防ぐ）
+          _stableKey: `key-${Date.now()}`,
         },
       ],
     });
@@ -305,7 +320,7 @@ export default function Settings({ onClose }) {
 
             <div className="members-list">
               {config.council_members.map((member, index) => (
-                <div key={member.id} className="member-card">
+                <div key={member._stableKey || `member-${index}`} className="member-card">
                   <div className="member-header">
                     <span className="member-index">#{index + 1}</span>
                     <button

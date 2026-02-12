@@ -116,18 +116,158 @@
   font-size: 14px;
 }
 
-.stage-loading {
+/* === プログレスステッパー（3段階処理の全体像を表示） === */
+.progress-stepper {
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 16px 12px;
+  margin: 12px 0;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-step__indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-light);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.progress-step--active .progress-step__indicator {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: var(--accent-blue-light);
+  animation: pulse-ring 1.5s ease-in-out infinite;
+}
+
+.progress-step--done .progress-step__indicator {
+  border-color: var(--accent-green);
+  color: #fff;
+  background: var(--accent-green);
+}
+
+.progress-step__label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.progress-step--active .progress-step__label {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.progress-step--done .progress-step__label {
+  color: var(--accent-green);
+}
+
+.progress-step__connector {
+  width: 32px;
+  height: 2px;
+  background: var(--border-light);
+  margin: 0 8px;
+  transition: background 0.3s ease;
+}
+
+.progress-step__connector--done {
+  background: var(--accent-green);
+}
+
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(74, 144, 226, 0); }
+}
+
+/* === スケルトンローディング === */
+.stage-loading {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   margin: 12px 0;
   background: var(--bg-tertiary);
   border-radius: 8px;
   border: 1px solid var(--border-color);
+}
+
+.stage-loading__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--text-secondary);
   font-size: 14px;
   font-style: italic;
+}
+
+.skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-secondary) 50%, var(--bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-line:nth-child(1) { width: 90%; }
+.skeleton-line:nth-child(2) { width: 75%; }
+.skeleton-line:nth-child(3) { width: 60%; }
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* === 最下部へスクロールボタン === */
+.scroll-to-bottom {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.scroll-to-bottom:hover {
+  background: var(--bg-hover);
+}
+
+.scroll-to-bottom:active {
+  transform: scale(0.95);
 }
 
 .spinner {
@@ -427,5 +567,32 @@
   /* モバイルではtextareaの最小高さを縮小してスペースを節約 */
   .message-input {
     min-height: 60px;
+  }
+
+  /* プログレスステッパーのモバイル最適化 */
+  .progress-stepper {
+    padding: 12px 8px;
+    margin: 8px 0;
+  }
+
+  .progress-step__indicator {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
+  .progress-step__label {
+    font-size: 11px;
+  }
+
+  .progress-step__connector {
+    width: 20px;
+    margin: 0 4px;
+  }
+
+  /* スケルトンローディングのモバイル最適化 */
+  .stage-loading {
+    padding: 12px;
+    margin: 8px 0;
   }
 }
