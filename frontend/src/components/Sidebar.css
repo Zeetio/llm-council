@@ -5,7 +5,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
+  height: 100dvh;
+  /* モバイルブラウザのアドレスバー分を動的に考慮 */
   z-index: 20;
 }
 
@@ -150,6 +151,16 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  /* スクロールバーを非表示にする（機能は維持） */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
+}
+
+.conversation-list::-webkit-scrollbar {
+  display: none;
+  /* Chrome/Safari */
 }
 
 .no-conversations {
@@ -219,6 +230,20 @@
 .conversation-delete-btn:hover {
   color: var(--accent-red);
   background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
+}
+
+background: var(--accent-red-light, rgba(239, 68, 68, 0.1));
+}
+
+/* PC画面でのサイドバー開閉制御 */
+@media (min-width: 901px) {
+  .sidebar {
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar:not(.sidebar--open) {
+    margin-left: -260px;
+  }
 }
 
 @media (max-width: 900px) {

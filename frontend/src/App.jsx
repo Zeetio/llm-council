@@ -23,9 +23,26 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [projectId, setProjectId] = useState(apiGetProjectId());
   const [projects, setProjects] = useState([]);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const lastIsMobileRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 900);
+  const lastIsMobileRef = useRef(isMobile);
+
+  // 画面サイズ監視
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 900;
+      if (mobile !== lastIsMobileRef.current) {
+        setIsMobile(mobile);
+        // PCに切り替わったらサイドバーを開く、モバイルなら閉じる
+        setIsSidebarOpen(!mobile);
+        lastIsMobileRef.current = mobile;
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const preservePasswordRef = useRef(false);
 
   // Notification hook

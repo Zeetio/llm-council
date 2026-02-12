@@ -251,16 +251,15 @@ export default function ChatInterface({
   return (
     <div className="chat-interface">
       <div className="chat-header">
-        {isMobile && (
-          <button
-            type="button"
-            className="menu-button"
-            onClick={() => onToggleSidebar?.()}
-            aria-label="Open sidebar"
-          >
-            ☰
-          </button>
-        )}
+        <button
+          type="button"
+          className="menu-button"
+          onClick={() => onToggleSidebar?.()}
+          aria-label="Toggle sidebar"
+          title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          ☰
+        </button>
         <div className="chat-header__title">
           {conversationTitle}
         </div>
