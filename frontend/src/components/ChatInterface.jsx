@@ -243,10 +243,15 @@ export default function ChatInterface({
   const messages = conversation?.messages ?? [];
   const conversationTitle = conversation?.title || 'LLM Council';
 
+  // 合計コストを計算
+  const totalCost = messages.reduce((acc, msg) => {
+    return acc + (msg.usage?.total_cost_usd || 0);
+  }, 0);
+
   return (
     <div className="chat-interface">
-      {isMobile && (
-        <div className="chat-header">
+      <div className="chat-header">
+        {isMobile && (
           <button
             type="button"
             className="menu-button"
@@ -255,22 +260,19 @@ export default function ChatInterface({
           >
             ☰
           </button>
-          <div className="chat-header__title">
-            {conversationTitle}
-          </div>
+        )}
+        <div className="chat-header__title">
+          {conversationTitle}
         </div>
-      )}
 
-      {isMobile && !isSidebarOpen && (
-        <button
-          type="button"
-          className="menu-button menu-button--floating"
-          onClick={() => onToggleSidebar?.()}
-          aria-label="Open sidebar"
-        >
-          ☰
-        </button>
-      )}
+        {/* 合計コスト表示 */}
+        <div className="chat-cost-badge" title="この会話のAPI利用料合計">
+          <span className="cost-icon">💰</span>
+          <span className="cost-value">${totalCost.toFixed(4)}</span>
+        </div>
+      </div>
+
+
       <div className="messages-container" ref={messagesContainerRef}>
         {!hasConversation ? (
           <div className="empty-state">

@@ -20,6 +20,31 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-primary);
+  /* justify-content: space-between; 不要、flex-growで制御 */
+}
+
+.chat-cost-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: auto;
+  /* 右寄せ */
+}
+
+.cost-icon {
+  font-size: 14px;
+}
+
+.cost-value {
+  font-family: monospace;
+  color: var(--text-primary);
 }
 
 .chat-header__title {

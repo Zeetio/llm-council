@@ -431,15 +431,25 @@ function App() {
         }
 
         // 完了時の処理
-        if (status === 'completed' && jobData.usage) {
+        if (status === 'completed') {
           setCurrentConversation((prev) => {
             if (!prev) return prev;
             const messages = [...prev.messages];
             const lastIdx = messages.length - 1;
             if (lastIdx < 0 || messages[lastIdx].role !== 'assistant') return prev;
+
+            // usageがない場合はデフォルト値を設定
+            const usageData = jobData.usage || {
+              total_calls: 0,
+              total_tokens: 0,
+              total_cost_usd: 0,
+              by_stage: {},
+              by_model: {}
+            };
+
             messages[lastIdx] = {
               ...messages[lastIdx],
-              usage: jobData.usage,
+              usage: usageData,
             };
             return { ...prev, messages };
           });
