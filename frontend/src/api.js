@@ -90,6 +90,13 @@ export function clearProjectPassword() {
   projectPassword = null;
 }
 
+/**
+ * セッションにパスワードが保存されているか確認
+ */
+export function hasProjectPassword() {
+  return projectPassword !== null;
+}
+
 function withProject(url) {
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}project_id=${encodeURIComponent(projectId)}`;

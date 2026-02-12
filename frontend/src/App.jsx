@@ -9,7 +9,8 @@ import {
   setProjectId as apiSetProjectId,
   getActiveJob,
   saveActiveJob,
-  clearActiveJob
+  clearActiveJob,
+  hasProjectPassword
 } from './api';
 import useNotification from './hooks/useNotification';
 import './App.css';
@@ -51,8 +52,8 @@ function App() {
       // パスワード保護状態を確認
       try {
         const authStatus = await api.getProjectAuthStatus(projectId);
-        if (authStatus.has_password) {
-          // パスワードダイアログを表示（初回認証）
+        if (authStatus.has_password && !hasProjectPassword()) {
+          // パスワード未入力 → ダイアログを表示
           setPendingProjectId(projectId);
           setIsAuthRequired(true);
           setShowPasswordDialog(true);
@@ -63,7 +64,7 @@ function App() {
         console.error('Failed to check auth status:', error);
       }
 
-      // パスワードなし - 通常読み込み
+      // パスワードなし or 認証済み → 通常読み込み
       setIsAuthRequired(false);
       loadConversations();
       loadProjects();
