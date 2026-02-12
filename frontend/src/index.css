@@ -1,5 +1,5 @@
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -8,76 +8,81 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* ライトモード（デフォルト） */
+  /* プレミアムライトモード */
   --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #fafafa;
-  --bg-sidebar: #f8f8f8;
-  --bg-hover: #f0f0f0;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-sidebar: #f8fafc;
+  --bg-hover: #e2e8f0;
   --bg-input: #ffffff;
-  --bg-code: #f5f5f5;
-  --bg-user-message: #f0f7ff;
-  --bg-stage3: #f0fff0;
-  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-code: #f1f5f9;
+  --bg-user-message: #eef2ff;
+  --bg-stage3: #ecfdf5;
+  --bg-overlay: rgba(15, 23, 42, 0.6);
 
-  --text-primary: #333333;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
-  --text-muted: #888888;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --text-muted: #64748b;
 
-  --border-color: #e0e0e0;
-  --border-light: #d0d0d0;
-  --border-input: #ddd;
+  --border-color: #e2e8f0;
+  --border-light: #cbd5e1;
+  --border-input: #d1d5db;
 
-  --accent-blue: #4a90e2;
-  --accent-blue-hover: #357abd;
-  --accent-blue-light: #e3f2fd;
-  --accent-blue-border: #d0e7ff;
-  --accent-green: #2d8a2d;
-  --accent-green-light: #c8e6c8;
-  --accent-red: #e57373;
-  --accent-red-hover: #d32f2f;
-  --accent-yellow: #ffc107;
-  --accent-yellow-light: #fffde7;
+  --accent-blue: #6366f1;
+  --accent-blue-hover: #4f46e5;
+  --accent-blue-light: #eef2ff;
+  --accent-blue-border: #c7d2fe;
+  --accent-green: #059669;
+  --accent-green-light: #d1fae5;
+  --accent-red: #ef4444;
+  --accent-red-hover: #dc2626;
+  --accent-yellow: #f59e0b;
+  --accent-yellow-light: #fef3c7;
 
-  --shadow-color: rgba(0, 0, 0, 0.1);
-  --shadow-popup: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-color: rgba(15, 23, 42, 0.08);
+  --shadow-popup: 0 4px 16px rgba(15, 23, 42, 0.12);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  --radius: 10px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme="dark"] {
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #2a2a2a;
-  --bg-tertiary: #333333;
-  --bg-sidebar: #252525;
-  --bg-hover: #3a3a3a;
-  --bg-input: #2a2a2a;
-  --bg-code: #2a2a2a;
-  --bg-user-message: #1e3a5f;
-  --bg-stage3: #1a3a1a;
-  --bg-overlay: rgba(0, 0, 0, 0.7);
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #1e293b;
+  --bg-sidebar: #0f172a;
+  --bg-hover: #334155;
+  --bg-input: #1e293b;
+  --bg-code: #1e293b;
+  --bg-user-message: #1e1b4b;
+  --bg-stage3: #064e3b;
+  --bg-overlay: rgba(0, 0, 0, 0.75);
 
-  --text-primary: #e4e4e4;
-  --text-secondary: #a8a8a8;
-  --text-tertiary: #707070;
-  --text-muted: #888888;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #475569;
+  --text-muted: #64748b;
 
-  --border-color: #3a3a3a;
-  --border-light: #4a4a4a;
-  --border-input: #4a4a4a;
+  --border-color: #334155;
+  --border-light: #475569;
+  --border-input: #475569;
 
-  --accent-blue: #5a9eff;
-  --accent-blue-hover: #4a8ad9;
-  --accent-blue-light: #1e3a5f;
-  --accent-blue-border: #2a4a6f;
-  --accent-green: #4db84d;
-  --accent-green-light: #1a3a1a;
-  --accent-red: #ff6b6b;
-  --accent-red-hover: #ff4444;
-  --accent-yellow: #ffca28;
-  --accent-yellow-light: #3a3520;
+  --accent-blue: #818cf8;
+  --accent-blue-hover: #6366f1;
+  --accent-blue-light: #1e1b4b;
+  --accent-blue-border: #312e81;
+  --accent-green: #34d399;
+  --accent-green-light: #064e3b;
+  --accent-red: #f87171;
+  --accent-red-hover: #ef4444;
+  --accent-yellow: #fbbf24;
+  --accent-yellow-light: #451a03;
 
-  --shadow-color: rgba(0, 0, 0, 0.3);
-  --shadow-popup: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+  --shadow-popup: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -96,7 +101,8 @@ body {
 
 #root {
   height: 100vh;
-  height: 100dvh; /* モバイルブラウザのアドレスバー分を動的に考慮 */
+  height: 100dvh;
+  /* モバイルブラウザのアドレスバー分を動的に考慮 */
   width: 100vw;
   overflow: hidden;
 }
@@ -194,6 +200,7 @@ body {
 
 /* タッチフィードバック: ボタン押下時の視覚反応 */
 @media (hover: none) and (pointer: coarse) {
+
   button:active,
   .tab:active,
   .conversation-item:active {

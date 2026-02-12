@@ -301,6 +301,23 @@ function App() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // ローディング状態をリセット
+    setIsLoading(false);
+    // 未完了のassistantメッセージのloadingフラグをクリア
+    setCurrentConversation((prev) => {
+      if (!prev) return prev;
+      const messages = [...prev.messages];
+      const lastIdx = messages.length - 1;
+      if (lastIdx >= 0 && messages[lastIdx].role === 'assistant') {
+        messages[lastIdx] = {
+          ...messages[lastIdx],
+          loading: { stage1: false, stage2: false, stage3: false },
+        };
+      }
+      return { ...prev, messages };
+    });
+    // アクティブジョブをクリア
+    clearActiveJob();
   };
 
   /**

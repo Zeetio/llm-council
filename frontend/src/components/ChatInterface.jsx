@@ -160,7 +160,7 @@ export default function ChatInterface({
     if (!el) return;
     const handleScroll = () => {
       const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-      setShowScrollButton(!isNearBottom && el.scrollHeight > el.clientHeight + 200);
+      setShowScrollButton(!isNearBottom && el.scrollHeight > el.clientHeight + 50);
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
@@ -346,42 +346,23 @@ export default function ChatInterface({
           )}
 
           <form className="input-form" onSubmit={handleSubmit}>
-            <div className="input-wrapper">
-              {attachedFiles.length > 0 && (
-                <div className="attached-files">
-                  {attachedFiles.map((file, index) => (
-                    <div key={index} className="attached-file">
-                      <span className="file-name">{file.name}</span>
-                      <button
-                        type="button"
-                        className="remove-file"
-                        onClick={() => removeFile(index)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <textarea
-                className="message-input"
-                placeholder={isMobile
-                  ? "質問を入力..."
-                  : "Ask your question... (Shift+Enter for new line, Enter to send)"}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  // テキストエリア自動リサイズ
-                  const el = e.target;
-                  el.style.height = 'auto';
-                  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-                }}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-                rows={1}
-              />
-            </div>
-            <div className="input-actions">
+            {attachedFiles.length > 0 && (
+              <div className="attached-files">
+                {attachedFiles.map((file, index) => (
+                  <div key={index} className="attached-file">
+                    <span className="file-name">{file.name}</span>
+                    <button
+                      type="button"
+                      className="remove-file"
+                      onClick={() => removeFile(index)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="input-row">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -399,6 +380,23 @@ export default function ChatInterface({
               >
                 📎
               </button>
+              <textarea
+                className="message-input"
+                placeholder={isMobile
+                  ? "質問を入力..."
+                  : "Ask your question... (Shift+Enter for new line, Enter to send)"}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // テキストエリア自動リサイズ
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+                }}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                rows={1}
+              />
               {isLoading ? (
                 <button
                   type="button"
