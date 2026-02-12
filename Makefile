@@ -240,6 +240,7 @@ deploy: docker-push ## Cloud Runにデプロイ（常にキャッシュなしビ
 		--platform managed \
 		--allow-unauthenticated \
 		--set-secrets="OPENROUTER_API_KEY=$(SECRET_OPENROUTER):latest,TAVILY_API_KEY=$(SECRET_TAVILY):latest" \
+		--set-env-vars="STORAGE_BACKEND=gcs,GCS_BUCKET=llm-council-data-gen-lang-client-0381091775" \
 		--memory 4Gi \
 		--cpu 1 \
 		--min-instances 0 \
